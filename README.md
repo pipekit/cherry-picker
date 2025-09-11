@@ -2,6 +2,15 @@
 
 A CLI tool for managing cherry-picks across GitHub repositories using a YAML configuration file to track state.
 
+It is currently highly opinionated and only supports GitHub repositories.
+* It uses cursor-agent for AI-assisted conflict resolution.
+* It uses semantic versioning for target branches.
+* It expects squash merges for PRs.
+
+My use case is to cherry-pick PRs from the main branch to release branches for argoproj/argo-workflows.
+
+I'm open to contributions to make it more flexible and support other versioning schemes and repositories.
+
 ## Installation
 
 Build the tool from source:
