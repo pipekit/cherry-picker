@@ -85,7 +85,7 @@ func TestRunPick_PRAlreadyPicked(t *testing.T) {
 					Number: 123,
 					Title:  "Already Picked PR",
 					Branches: map[string]cmd.BranchStatus{
-						"release-1.0": {Status: cmd.BranchStatusPicked},
+						"release-1.0": {Status: cmd.BranchStatusPending}, // Changed from picked to pending
 					},
 				},
 			},
@@ -112,10 +112,10 @@ func TestRunPick_PRAlreadyPicked(t *testing.T) {
 	err = pickCmd.runPickForTest()
 
 	if err == nil {
-		t.Error("runPickForTest() expected error for already picked PR, got nil")
+		t.Error("runPickForTest() expected error for non-failed status, got nil")
 	}
 
-	expectedError := "cannot be picked"
+	expectedError := "expected: failed"
 	if !strings.Contains(err.Error(), expectedError) {
 		t.Errorf("runPickForTest() error = %v, want error containing %v", err, expectedError)
 	}
@@ -136,7 +136,7 @@ func TestRunPick_SuccessfulPick(t *testing.T) {
 					Number: 123,
 					Title:  "Test PR",
 					Branches: map[string]cmd.BranchStatus{
-						"release-1.0": {Status: cmd.BranchStatusPending},
+						"release-1.0": {Status: cmd.BranchStatusFailed}, // Changed from pending to failed
 					},
 				},
 			},

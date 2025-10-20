@@ -206,38 +206,45 @@ func addPRForCherryPicking(config *cmd.Config, pr github.PR, cherryPickPRs []git
 
 	for _, branch := range pr.CherryPickFor {
 		if cherryPick, exists := existingByBranch[branch]; exists {
-			// Cherry-pick PR already exists - fetch its details
-			fmt.Printf("  🍒 Found existing cherry-pick PR #%d for %s\n", cherryPick.Number, branch)
-
-			// Get PR details including CI status
-			prDetails, err := client.GetPRWithDetails(config.Org, config.Repo, cherryPick.Number)
-			if err != nil {
-				fmt.Printf("  ⚠️  Warning: failed to fetch details for PR #%d: %v\n", cherryPick.Number, err)
-				// Add as picked but with unknown status
-				branches[branch] = cmd.BranchStatus{
-					Status: "picked",
-					PR: &cmd.PickPR{
-						Number:   cherryPick.Number,
-						Title:    fmt.Sprintf("%s (cherry-pick %s)", pr.Title, branch),
-						CIStatus: "unknown",
-					},
-				}
+			// Check if this is a failed cherry-pick attempt
+			if cherryPick.Failed {
+				// Bot attempted cherry-pick but failed - mark as failed
+				fmt.Printf("  ❌ Bot cherry-pick failed for %s\n", branch)
+				branches[branch] = cmd.BranchStatus{Status: cmd.BranchStatusFailed}
 			} else {
-				// Determine status based on merge state
-				status := cmd.BranchStatusPicked
-				if prDetails.Merged {
-					status = cmd.BranchStatusMerged
-				}
+				// Cherry-pick PR successfully created - fetch its details
+				fmt.Printf("  🍒 Found existing cherry-pick PR #%d for %s\n", cherryPick.Number, branch)
 
-				branches[branch] = cmd.BranchStatus{
-					Status: status,
-					PR: &cmd.PickPR{
-						Number:   prDetails.Number,
-						Title:    prDetails.Title,
-						CIStatus: cmd.ParseCIStatus(prDetails.CIStatus),
-					},
+				// Get PR details including CI status
+				prDetails, err := client.GetPRWithDetails(config.Org, config.Repo, cherryPick.Number)
+				if err != nil {
+					fmt.Printf("  ⚠️  Warning: failed to fetch details for PR #%d: %v\n", cherryPick.Number, err)
+					// Add as picked but with unknown status
+					branches[branch] = cmd.BranchStatus{
+						Status: "picked",
+						PR: &cmd.PickPR{
+							Number:   cherryPick.Number,
+							Title:    fmt.Sprintf("%s (cherry-pick %s)", pr.Title, branch),
+							CIStatus: "unknown",
+						},
+					}
+				} else {
+					// Determine status based on merge state
+					status := cmd.BranchStatusPicked
+					if prDetails.Merged {
+						status = cmd.BranchStatusMerged
+					}
+
+					branches[branch] = cmd.BranchStatus{
+						Status: status,
+						PR: &cmd.PickPR{
+							Number:   prDetails.Number,
+							Title:    prDetails.Title,
+							CIStatus: cmd.ParseCIStatus(prDetails.CIStatus),
+						},
+					}
+					fmt.Printf("  ✓ Status: %s, CI: %s\n", status, prDetails.CIStatus)
 				}
-				fmt.Printf("  ✓ Status: %s, CI: %s\n", status, prDetails.CIStatus)
 			}
 		} else {
 			// No cherry-pick PR exists yet - mark as pending

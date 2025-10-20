@@ -35,10 +35,10 @@ func NewPickCmd(globalConfigFile *string, loadConfig func(string) (*cmd.Config, 
 		Long: `Cherry-pick a PR to target branches with AI-assisted conflict resolution.
 This command is for handling cherry-picks that the automated bot couldn't complete due to conflicts.
 
-If no target branch is specified, the PR will be cherry-picked to all pending branches.
-The PR must be currently tracked and have pending status for the target branch(es).
+If no target branch is specified, the PR will be cherry-picked to all failed branches.
+The PR must be currently tracked and have 'failed' status for the target branch(es).
 
-Conflicts are automatically resolved using cursor-agent AI assistance.`,
+Conflicts are automatically resolved using configured AI assistant.`,
 		Args:         cobra.RangeArgs(1, 2),
 		SilenceUsage: true,
 		RunE: func(cobraCmd *cobra.Command, args []string) error {
@@ -153,7 +153,7 @@ func (pc *PickCommand) runPickForTest() error {
 	return nil
 }
 
-// validatePickableStatus validates branches can be picked
+// validatePickableStatus validates branches can be picked (must be in 'failed' status)
 func (pc *PickCommand) validatePickableStatus(pr *cmd.TrackedPR, branches []string) error {
 	if pr.Branches == nil {
 		pr.Branches = make(map[string]cmd.BranchStatus)
@@ -164,8 +164,8 @@ func (pc *PickCommand) validatePickableStatus(pr *cmd.TrackedPR, branches []stri
 		if !exists {
 			return fmt.Errorf("PR #%d has no status for branch '%s'", pc.PRNumber, branch)
 		}
-		if status.Status != cmd.BranchStatusPending {
-			return fmt.Errorf("PR #%d for branch '%s' cannot be picked (current status: %s)", pc.PRNumber, branch, status.Status)
+		if status.Status != cmd.BranchStatusFailed {
+			return fmt.Errorf("PR #%d for branch '%s' can only be picked if bot cherry-pick failed (current status: %s, expected: failed)", pc.PRNumber, branch, status.Status)
 		}
 	}
 	return nil
@@ -250,9 +250,13 @@ func (pc *PickCommand) performCherryPickForBranch(sha, branch string, prNumber i
 	fmt.Printf("✅ Successfully cherry-picked to branch: %s\n", branch)
 	fmt.Printf("✅ Created PR #%d: %s → %s\n", cherryPickPRNumber, cherryPickBranch, branch)
 
+	// Extract version from branch name for title (e.g., "release-3.7" -> "3.7")
+	version := strings.TrimPrefix(branch, "release-")
+	prTitle := fmt.Sprintf("%s (cherry-pick #%d for %s)", originalTitle, prNumber, version)
+
 	return &CherryPickResult{
 		PRNumber: cherryPickPRNumber,
-		Title:    fmt.Sprintf("%s (cherry-pick %s)", originalTitle, branch),
+		Title:    prTitle,
 		CIStatus: "pending",
 	}, nil
 }
@@ -307,10 +311,16 @@ func (pc *PickCommand) pushBranch(branchName string) error {
 	return cmd.Run()
 }
 
-// createCherryPickPR creates a PR for the cherry-pick
+// createCherryPickPR creates a PR for the cherry-pick using bot-style formatting
 func (pc *PickCommand) createCherryPickPR(headBranch, baseBranch string, originalPRNumber int, originalTitle string) (int, error) {
-	prTitle := fmt.Sprintf("%s (cherry-pick %s)", originalTitle, baseBranch)
-	prDescription := fmt.Sprintf("Cherry-picked %s from #%d", originalTitle, originalPRNumber)
+	// Extract version from branch name (e.g., "release-3.7" -> "3.7")
+	version := strings.TrimPrefix(baseBranch, "release-")
+
+	// Title format matches bot: "<original-title> (cherry-pick #<pr> for <version>)"
+	prTitle := fmt.Sprintf("%s (cherry-pick #%d for %s)", originalTitle, originalPRNumber, version)
+
+	// Body format matches bot: "Cherry-picked <original-title> (#<pr>)"
+	prDescription := fmt.Sprintf("Cherry-picked %s (#%d)", originalTitle, originalPRNumber)
 
 	prNumber, err := pc.GitHubClient.CreatePR(pc.Config.Org, pc.Config.Repo, prTitle, prDescription, headBranch, baseBranch)
 	if err != nil {

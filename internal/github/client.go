@@ -376,10 +376,13 @@ type CherryPickPR struct {
 	Number     int
 	Branch     string
 	OriginalPR int
+	Failed     bool // True if cherry-pick attempt failed
 }
 
-// GetCherryPickPRsFromComments extracts cherry-pick PR numbers from bot comments
-// Looks for patterns like "🍒 Cherry-pick PR created for 3.7: #14944"
+// GetCherryPickPRsFromComments extracts cherry-pick PR numbers and failures from bot comments
+// Looks for patterns like:
+//   - Success: "🍒 Cherry-pick PR created for 3.7: #14944"
+//   - Failure: "Cherry-pick failed for 3.7" or similar failure messages
 func (c *Client) GetCherryPickPRsFromComments(org, repo string, prNumber int) ([]CherryPickPR, error) {
 	comments, _, err := c.client.Issues.ListComments(c.ctx, org, repo, prNumber, nil)
 	if err != nil {
@@ -387,14 +390,16 @@ func (c *Client) GetCherryPickPRsFromComments(org, repo string, prNumber int) ([
 	}
 
 	var cherryPickPRs []CherryPickPR
-	// Pattern: 🍒 Cherry-pick PR created for 3.7: #14944
-	// or: Cherry-pick PR created for 3.6: #14945
-	cherryPickPattern := regexp.MustCompile(`Cherry-pick PR created for ([0-9.]+): #(\d+)`)
+	// Pattern for successful cherry-pick: 🍒 Cherry-pick PR created for 3.7: #14944
+	successPattern := regexp.MustCompile(`Cherry-pick PR created for ([0-9.]+): #(\d+)`)
+	// Pattern for failed cherry-pick: various failure messages
+	failurePattern := regexp.MustCompile(`(?i)cherry-pick.*failed.*for ([0-9.]+)|failed.*cherry-pick.*([0-9.]+)`)
 
 	for _, comment := range comments {
 		body := comment.GetBody()
-		matches := cherryPickPattern.FindAllStringSubmatch(body, -1)
 
+		// Check for successful cherry-picks
+		matches := successPattern.FindAllStringSubmatch(body, -1)
 		for _, match := range matches {
 			if len(match) >= 3 {
 				version := match[1]
@@ -408,7 +413,29 @@ func (c *Client) GetCherryPickPRsFromComments(org, repo string, prNumber int) ([
 					Number:     cherryPickNum,
 					Branch:     "release-" + version,
 					OriginalPR: prNumber,
+					Failed:     false,
 				})
+			}
+		}
+
+		// Check for failed cherry-picks
+		failMatches := failurePattern.FindAllStringSubmatch(body, -1)
+		for _, match := range failMatches {
+			if len(match) >= 2 {
+				// Try both capture groups since the pattern has alternatives
+				version := match[1]
+				if version == "" && len(match) >= 3 {
+					version = match[2]
+				}
+
+				if version != "" {
+					cherryPickPRs = append(cherryPickPRs, CherryPickPR{
+						Number:     0, // No PR number for failures
+						Branch:     "release-" + version,
+						OriginalPR: prNumber,
+						Failed:     true,
+					})
+				}
 			}
 		}
 	}

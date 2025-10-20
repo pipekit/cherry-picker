@@ -107,10 +107,12 @@ This command will:
 
 - Fetch merged PRs to the source branch since the last fetch date (or 30 days ago for first run)
 - Only include PRs with `cherry-pick/*` labels (e.g., `cherry-pick/3.6` for release-3.6)
-- Check PR comments for existing cherry-pick PRs created by bots (e.g., argo-cd-cherry-pick-bot)
-- Automatically add PRs to tracking:
-  - If bot already created cherry-pick PRs: mark as "picked" or "merged" with CI status
-  - Otherwise: mark as "pending" for manual cherry-picking
+- Check PR comments for bot-created cherry-pick PRs and failures (e.g., argo-cd-cherry-pick-bot)
+- Automatically add PRs to tracking with status:
+  - **pending**: Bot hasn't attempted cherry-pick yet (label exists but no bot action)
+  - **failed**: Bot attempted cherry-pick but failed (e.g., due to conflicts)
+  - **picked**: Bot successfully created cherry-pick PR
+  - **merged**: Cherry-pick PR has been merged
 - Update the last fetch date
 
 ### Cherry-Pick PRs (AI-Assisted)
@@ -119,17 +121,18 @@ Cherry-pick PRs that the automated bot couldn't handle due to conflicts:
 
 ```bash
 ./cherry-picker pick 123 release-1.0
-./cherry-picker pick 123  # Pick to all pending branches
+./cherry-picker pick 123  # Pick to all failed branches
 ```
 
 This command handles cherry-picks that failed with the automated bot. It will:
 
+- **Requirement**: PR must have `failed` status for the target branch
 - Create a new branch (`cherry-pick-<prnum>-<target>`)
-- Perform `git cherry-pick -x` with AI-assisted conflict resolution via cursor-agent
+- Perform `git cherry-pick -x` with AI-assisted conflict resolution
 - Push the branch and create a cherry-pick PR
 - Update the configuration with the new PR details
 
-**Note:** This is specifically for PRs marked as "pending" where the bot hasn't created a cherry-pick PR yet, typically because of merge conflicts.
+**Note:** This command only works on PRs with `failed` status, meaning the bot attempted cherry-pick but failed (usually due to conflicts). PRs with `pending` status haven't been attempted by the bot yet and should wait for the bot to try first.
 
 ### Retry Failed CI
 
@@ -203,20 +206,20 @@ This command will:
 Cherry-pick status for myorg/myrepo (source: main)
 
 Fix critical bug (https://github.com/myorg/myrepo/pull/123)
-  release-1.0    : ⏳ pending
-                   💡 ./cherry-picker pick 123 release-1.0
-  release-2.0    : 🔄 picked (https://github.com/myorg/myrepo/pull/456)
-                   Fix critical bug (cherry-pick release-2.0) [❌ not merged, ❌ CI failing]
-                   💡 ./cherry-picker retry 123 release-2.0
+  release-1.0    : ⏳ pending (bot hasn't attempted)
+  release-2.0    : ❌ failed (bot couldn't cherry-pick)
+                   💡 ./cherry-picker pick 123 release-2.0
+  release-3.0    : 🔄 picked (https://github.com/myorg/myrepo/pull/456)
+                   Fix critical bug (cherry-pick release-3.0) [❌ CI failing]
+                   💡 ./cherry-picker retry 123 release-3.0
 
 Add new feature (https://github.com/myorg/myrepo/pull/125)
   release-1.0    : ✅ picked (https://github.com/myorg/myrepo/pull/457)
-                   Add new feature (cherry-pick release-1.0) [✅ merged, ✅ CI passing]
-  release-2.0    : 🔄 picked (https://github.com/myorg/myrepo/pull/458)
-                   Add new feature (cherry-pick release-2.0) [❌ not merged, ✅ CI passing]
-                   💡 ./cherry-picker merge 125 release-2.0
+                   Add new feature (cherry-pick release-1.0) [✅ CI passing]
+                   💡 ./cherry-picker merge 125 release-1.0
+  release-2.0    : ✅ merged
 
-Summary: 2 PR(s), 1 branch pick(s) pending, 3 branch pick(s) completed (2 picked, 1 merged)
+Summary: 2 PR(s), 1 pending, 1 failed, 3 completed (2 picked, 1 merged)
 ```
 
 **Note:** PR details are only fetched when `GITHUB_TOKEN` environment variable is set. Without it, only PR numbers are shown.
@@ -480,18 +483,20 @@ tracked_prs:
     title: "Fix critical bug"
     branches:
       release-1.0:
-        status: pending
+        status: pending  # Bot hasn't attempted yet
       release-2.0:
-        status: merged
+        status: failed   # Bot tried but failed (conflicts)
+      release-3.0:
+        status: merged   # Successfully cherry-picked and merged
         pr:
           number: 456
-          title: "Fix critical bug (cherry-pick release-2.0)"
+          title: "Fix critical bug (cherry-pick release-3.0)"
           ci_status: "passing"
   - number: 124
     title: "Add new feature"
     branches:
       release-1.0:
-        status: picked
+        status: picked  # Bot successfully created PR, waiting for merge
         pr:
           number: 457
           title: "Add new feature (cherry-pick release-1.0)"
@@ -505,7 +510,11 @@ Each tracked PR has per-branch status tracking:
 - **number**: Original PR number
 - **title**: PR title (fetched from GitHub)
 - **branches**: Map of target branch names to their status:
-  - **status**: `pending`, `picked`, or `merged`
+  - **status**: One of:
+    - `pending`: Bot hasn't attempted cherry-pick yet
+    - `failed`: Bot attempted but failed (usually conflicts)
+    - `picked`: Bot successfully created cherry-pick PR
+    - `merged`: Cherry-pick PR has been merged
   - **pr**: Details of the cherry-pick PR (when status is `picked` or `merged`):
     - **number**: Cherry-pick PR number
     - **title**: Cherry-pick PR title

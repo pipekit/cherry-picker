@@ -31,6 +31,7 @@ type BranchStatusType string
 
 const (
 	BranchStatusPending BranchStatusType = "pending"
+	BranchStatusFailed  BranchStatusType = "failed"
 	BranchStatusPicked  BranchStatusType = "picked"
 	BranchStatusMerged  BranchStatusType = "merged"
 )
@@ -40,6 +41,8 @@ func ParseBranchStatus(s string) BranchStatusType {
 	switch s {
 	case "pending":
 		return BranchStatusPending
+	case "failed":
+		return BranchStatusFailed
 	case "picked":
 		return BranchStatusPicked
 	case "merged":

@@ -117,8 +117,10 @@ func displayBranchStatus(branch string, status cmd.BranchStatus, config *cmd.Con
 
 	switch status.Status {
 	case "pending":
-		fmt.Printf("  %-15s: ⏳ pending\n", branch)
-		// Show pick command
+		fmt.Printf("  %-15s: ⏳ pending (bot hasn't attempted)\n", branch)
+	case "failed":
+		fmt.Printf("  %-15s: ❌ failed (bot couldn't cherry-pick)\n", branch)
+		// Show pick command for AI-assisted resolution
 		fmt.Printf("  %-15s  💡 %s%s pick %d %s\n", "", executablePath, configFlag, prNumber, branch)
 	case "picked":
 		if status.PR != nil {
@@ -170,6 +172,7 @@ func displayBranchStatus(branch string, status cmd.BranchStatus, config *cmd.Con
 // displayStatusSummary displays the summary statistics
 func displayStatusSummary(prs []cmd.TrackedPR) {
 	totalPending := 0
+	totalFailed := 0
 	totalPicked := 0
 	totalMerged := 0
 	for _, pr := range prs {
@@ -177,6 +180,8 @@ func displayStatusSummary(prs []cmd.TrackedPR) {
 			switch status.Status {
 			case "pending":
 				totalPending++
+			case "failed":
+				totalFailed++
 			case "picked":
 				totalPicked++
 			case "merged":
@@ -186,8 +191,8 @@ func displayStatusSummary(prs []cmd.TrackedPR) {
 	}
 
 	totalCompleted := totalPicked + totalMerged
-	fmt.Printf("Summary: %d PR(s), %d branch pick(s) pending, %d branch pick(s) completed (%d picked, %d merged)\n",
-		len(prs), totalPending, totalCompleted, totalPicked, totalMerged)
+	fmt.Printf("Summary: %d PR(s), %d pending, %d failed, %d completed (%d picked, %d merged)\n",
+		len(prs), totalPending, totalFailed, totalCompleted, totalPicked, totalMerged)
 }
 
 // getConfigFlag returns the config flag if not using default
