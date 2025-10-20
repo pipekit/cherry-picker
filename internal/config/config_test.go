@@ -103,20 +103,18 @@ func TestSaveConfig(t *testing.T) {
 		{
 			name: "valid config",
 			config: &cmd.Config{
-				Org:            "testorg",
-				Repo:           "testrepo",
-				SourceBranch:   "main",
-				TargetBranches: []string{"release-1.0", "release-2.0"},
+				Org:          "testorg",
+				Repo:         "testrepo",
+				SourceBranch: "main",
 			},
 			wantErr: false,
 		},
 		{
-			name: "config with empty target branches",
+			name: "config with different source branch",
 			config: &cmd.Config{
-				Org:            "testorg",
-				Repo:           "testrepo",
-				SourceBranch:   "develop",
-				TargetBranches: []string{},
+				Org:          "testorg",
+				Repo:         "testrepo",
+				SourceBranch: "develop",
 			},
 			wantErr: false,
 		},
@@ -158,10 +156,6 @@ func TestSaveConfig(t *testing.T) {
 
 			if loadedConfig.SourceBranch != tt.config.SourceBranch {
 				t.Errorf("SaveConfig() saved source_branch = %v, want %v", loadedConfig.SourceBranch, tt.config.SourceBranch)
-			}
-
-			if len(loadedConfig.TargetBranches) != len(tt.config.TargetBranches) {
-				t.Errorf("SaveConfig() saved target_branches length = %v, want %v", len(loadedConfig.TargetBranches), len(tt.config.TargetBranches))
 			}
 		})
 	}

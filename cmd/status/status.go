@@ -39,7 +39,7 @@ func runStatus(configFile string, loadConfig func(string) (*cmd.Config, error)) 
 
 	sortPRsByNumber(activePRs)
 	displayRepositoryHeader(config)
-	displayAllPRStatuses(activePRs, config.TargetBranches, config, configFile)
+	displayAllPRStatuses(activePRs, config, configFile)
 	displayStatusSummary(activePRs)
 
 	return nil
@@ -65,20 +65,19 @@ func sortPRsByNumber(activePRs []cmd.TrackedPR) {
 
 // displayRepositoryHeader shows repository information
 func displayRepositoryHeader(config *cmd.Config) {
-	fmt.Printf("Cherry-pick status for %s/%s (source: %s)\n", config.Org, config.Repo, config.SourceBranch)
-	fmt.Printf("Target branches: %s\n\n", strings.Join(config.TargetBranches, ", "))
+	fmt.Printf("Cherry-pick status for %s/%s (source: %s)\n\n", config.Org, config.Repo, config.SourceBranch)
 }
 
 // displayAllPRStatuses displays the status of all PRs
-func displayAllPRStatuses(prs []cmd.TrackedPR, targetBranches []string, config *cmd.Config, configFile string) {
+func displayAllPRStatuses(prs []cmd.TrackedPR, config *cmd.Config, configFile string) {
 	for _, pr := range prs {
-		displayPRStatus(pr, targetBranches, config, configFile)
+		displayPRStatus(pr, config, configFile)
 		fmt.Println()
 	}
 }
 
 // displayPRStatus displays the status of a single PR across all branches
-func displayPRStatus(pr cmd.TrackedPR, targetBranches []string, config *cmd.Config, configFile string) {
+func displayPRStatus(pr cmd.TrackedPR, config *cmd.Config, configFile string) {
 	displayPRHeader(pr, config)
 
 	if len(pr.Branches) == 0 {
@@ -87,7 +86,6 @@ func displayPRStatus(pr cmd.TrackedPR, targetBranches []string, config *cmd.Conf
 	}
 
 	displayTrackedBranches(pr.Branches, config, pr.Number, configFile)
-	displayUntrackedBranches(pr.Branches, targetBranches)
 }
 
 // displayPRHeader shows the PR number, title, and URL
@@ -122,15 +120,6 @@ func getSortedBranchNames(branches map[string]cmd.BranchStatus) []string {
 	}
 	sort.Strings(branchNames)
 	return branchNames
-}
-
-// displayUntrackedBranches shows target branches that are not tracked
-func displayUntrackedBranches(branches map[string]cmd.BranchStatus, targetBranches []string) {
-	for _, targetBranch := range targetBranches {
-		if _, exists := branches[targetBranch]; !exists {
-			fmt.Printf("  %-15s: ❌ not tracked\n", targetBranch)
-		}
-	}
 }
 
 // displayBranchStatus displays the status for a single branch

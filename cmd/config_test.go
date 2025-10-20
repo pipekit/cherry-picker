@@ -12,28 +12,17 @@ func TestConfig(t *testing.T) {
 		{
 			name: "config with all fields",
 			config: Config{
-				Org:            "testorg",
-				Repo:           "testrepo",
-				SourceBranch:   "main",
-				TargetBranches: []string{"release-1.0", "release-2.0"},
+				Org:          "testorg",
+				Repo:         "testrepo",
+				SourceBranch: "main",
 			},
 		},
 		{
-			name: "config with empty target branches",
+			name: "config with different source branch",
 			config: Config{
-				Org:            "testorg",
-				Repo:           "testrepo",
-				SourceBranch:   "develop",
-				TargetBranches: []string{},
-			},
-		},
-		{
-			name: "config with nil target branches",
-			config: Config{
-				Org:            "testorg",
-				Repo:           "testrepo",
-				SourceBranch:   "main",
-				TargetBranches: nil,
+				Org:          "testorg",
+				Repo:         "testrepo",
+				SourceBranch: "develop",
 			},
 		},
 	}
@@ -50,8 +39,6 @@ func TestConfig(t *testing.T) {
 			if tt.config.SourceBranch == "" {
 				t.Error("Config.SourceBranch should not be empty in test")
 			}
-			// TargetBranches can be empty or nil, so we just check it's accessible
-			_ = tt.config.TargetBranches
 		})
 	}
 }

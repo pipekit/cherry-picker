@@ -220,11 +220,10 @@ func TestBranchStatusStruct(t *testing.T) {
 func TestConfigWithTrackedPRs(t *testing.T) {
 	now := time.Now()
 	config := cmd.Config{
-		Org:            "testorg",
-		Repo:           "testrepo",
-		SourceBranch:   "main",
-		TargetBranches: []string{"release-1.0"},
-		LastFetchDate:  &now,
+		Org:           "testorg",
+		Repo:          "testrepo",
+		SourceBranch:  "main",
+		LastFetchDate: &now,
 		TrackedPRs: []cmd.TrackedPR{
 			{
 				Number:  123,

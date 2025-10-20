@@ -18,12 +18,13 @@ type Client struct {
 
 // PR represents a pull request from GitHub
 type PR struct {
-	Number   int
-	Title    string
-	URL      string
-	SHA      string
-	Merged   bool
-	CIStatus string // "passing", "failing", "pending", or "unknown"
+	Number        int
+	Title         string
+	URL           string
+	SHA           string
+	Merged        bool
+	CIStatus      string   // "passing", "failing", "pending", or "unknown"
+	CherryPickFor []string // Target branches extracted from cherry-pick/* labels
 }
 
 // Commit represents a commit from GitHub
@@ -78,16 +79,23 @@ func (c *Client) GetMergedPRs(org, repo, branch string, since time.Time) ([]PR, 
 				// Since we're sorting by updated desc, if we hit an old PR, we can stop
 				return allPRs, nil
 			}
-			if strings.HasPrefix(pr.GetTitle(), "feat:") {
+
+			// Extract cherry-pick target branches from labels
+			cherryPickBranches := extractCherryPickBranches(pr.Labels)
+
+			// Only include PRs that have cherry-pick labels
+			if len(cherryPickBranches) == 0 {
 				continue
 			}
+
 			allPRs = append(allPRs, PR{
-				Number:   pr.GetNumber(),
-				Title:    pr.GetTitle(),
-				URL:      pr.GetHTMLURL(),
-				SHA:      pr.GetMergeCommitSHA(),
-				Merged:   pr.MergedAt != nil,
-				CIStatus: "unknown", // CI status not fetched for listing
+				Number:        pr.GetNumber(),
+				Title:         pr.GetTitle(),
+				URL:           pr.GetHTMLURL(),
+				SHA:           pr.GetMergeCommitSHA(),
+				Merged:        pr.MergedAt != nil,
+				CIStatus:      "unknown", // CI status not fetched for listing
+				CherryPickFor: cherryPickBranches,
 			})
 		}
 
@@ -345,6 +353,21 @@ func isDCOCheck(checkName string) bool {
 	}
 
 	return false
+}
+
+// extractCherryPickBranches extracts target branches from cherry-pick/* labels
+// For example, "cherry-pick/3.6" becomes "release-3.6"
+func extractCherryPickBranches(labels []*github.Label) []string {
+	var branches []string
+	for _, label := range labels {
+		labelName := label.GetName()
+		if strings.HasPrefix(labelName, "cherry-pick/") {
+			version := strings.TrimPrefix(labelName, "cherry-pick/")
+			branch := "release-" + version
+			branches = append(branches, branch)
+		}
+	}
+	return branches
 }
 
 // CreatePR creates a new pull request

@@ -33,11 +33,10 @@ func TestRunPick_PRNotTracked(t *testing.T) {
 	configFile := "test-config.yaml"
 	loadConfig := func(filename string) (*cmd.Config, error) {
 		return &cmd.Config{
-			Org:            "testorg",
-			Repo:           "testrepo",
-			SourceBranch:   "main",
-			TargetBranches: []string{"release-1.0"},
-			TrackedPRs:     []cmd.TrackedPR{}, // No PRs tracked
+			Org:          "testorg",
+			Repo:         "testrepo",
+			SourceBranch: "main",
+			TrackedPRs:   []cmd.TrackedPR{}, // No PRs tracked
 		}, nil
 	}
 	saveConfig := func(filename string, config *cmd.Config) error {
@@ -76,10 +75,9 @@ func TestRunPick_PRIgnored(t *testing.T) {
 	configFile := "test-config.yaml"
 	loadConfig := func(filename string) (*cmd.Config, error) {
 		return &cmd.Config{
-			Org:            "testorg",
-			Repo:           "testrepo",
-			SourceBranch:   "main",
-			TargetBranches: []string{"release-1.0"},
+			Org:          "testorg",
+			Repo:         "testrepo",
+			SourceBranch: "main",
 			TrackedPRs: []cmd.TrackedPR{
 				{Number: 123, Title: "Ignored PR", Ignored: true}, // PR is ignored
 			},
@@ -121,10 +119,9 @@ func TestRunPick_SuccessfulPick(t *testing.T) {
 
 	loadConfig := func(filename string) (*cmd.Config, error) {
 		return &cmd.Config{
-			Org:            "testorg",
-			Repo:           "testrepo",
-			SourceBranch:   "main",
-			TargetBranches: []string{"release-1.0"},
+			Org:          "testorg",
+			Repo:         "testrepo",
+			SourceBranch: "main",
 			TrackedPRs: []cmd.TrackedPR{
 				{
 					Number:  123,

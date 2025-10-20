@@ -53,10 +53,9 @@ func TestRunStatus_NoConfig(t *testing.T) {
 func TestRunStatus_NoActivePRs(t *testing.T) {
 	loadConfig := func(filename string) (*cmd.Config, error) {
 		return &cmd.Config{
-			Org:            "testorg",
-			Repo:           "testrepo",
-			SourceBranch:   "main",
-			TargetBranches: []string{"release-1.0", "release-2.0"},
+			Org:          "testorg",
+			Repo:         "testrepo",
+			SourceBranch: "main",
 			TrackedPRs: []cmd.TrackedPR{
 				{Number: 123, Title: "Ignored PR", Ignored: true}, // All PRs are ignored
 			},
@@ -76,11 +75,10 @@ func TestRunStatus_WithActivePRs(t *testing.T) {
 	now := time.Now()
 	loadConfig := func(filename string) (*cmd.Config, error) {
 		return &cmd.Config{
-			Org:            "testorg",
-			Repo:           "testrepo",
-			SourceBranch:   "main",
-			TargetBranches: []string{"release-1.0", "release-2.0", "staging"},
-			LastFetchDate:  &now,
+			Org:           "testorg",
+			Repo:          "testrepo",
+			SourceBranch:  "main",
+			LastFetchDate: &now,
 			TrackedPRs: []cmd.TrackedPR{
 				{
 					Number:  123,
@@ -122,11 +120,10 @@ func TestRunStatus_WithActivePRs(t *testing.T) {
 func TestRunStatus_EmptyConfig(t *testing.T) {
 	loadConfig := func(filename string) (*cmd.Config, error) {
 		return &cmd.Config{
-			Org:            "testorg",
-			Repo:           "testrepo",
-			SourceBranch:   "main",
-			TargetBranches: []string{},
-			TrackedPRs:     []cmd.TrackedPR{},
+			Org:          "testorg",
+			Repo:         "testrepo",
+			SourceBranch: "main",
+			TrackedPRs:   []cmd.TrackedPR{},
 		}, nil
 	}
 
@@ -140,10 +137,9 @@ func TestRunStatus_EmptyConfig(t *testing.T) {
 func TestRunStatus_PRsWithoutBranches(t *testing.T) {
 	loadConfig := func(filename string) (*cmd.Config, error) {
 		return &cmd.Config{
-			Org:            "testorg",
-			Repo:           "testrepo",
-			SourceBranch:   "main",
-			TargetBranches: []string{"release-1.0"},
+			Org:          "testorg",
+			Repo:         "testrepo",
+			SourceBranch: "main",
 			TrackedPRs: []cmd.TrackedPR{
 				{
 					Number:   123,

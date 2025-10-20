@@ -81,11 +81,6 @@ func (pc *PickCommand) runWithGitOps(performGitOperations bool) error {
 
 	// Determine branches to update (3 lines vs ~10 lines)
 	branches := commands.DetermineBranchesToUpdate(pr, pc.TargetBranch)
-	if pc.TargetBranch != "" {
-		if err := pc.validateTargetBranchInConfig(pc.TargetBranch); err != nil {
-			return err
-		}
-	}
 
 	// Validate branch status (1 line vs ~15 lines)
 	if err := pc.validatePickableStatus(pr, branches); err != nil {
@@ -134,16 +129,6 @@ func (pc *PickCommand) runWithGitOps(performGitOperations bool) error {
 
 	commands.DisplaySuccessMessage("picked", pc.PRNumber, pc.TargetBranch, branches)
 	return nil
-}
-
-// validateTargetBranchInConfig checks if target branch exists in configuration
-func (pc *PickCommand) validateTargetBranchInConfig(targetBranch string) error {
-	for _, branch := range pc.Config.TargetBranches {
-		if branch == targetBranch {
-			return nil
-		}
-	}
-	return fmt.Errorf("target branch '%s' is not configured", targetBranch)
 }
 
 // validatePickableStatus validates branches can be picked

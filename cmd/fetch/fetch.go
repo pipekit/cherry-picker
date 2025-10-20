@@ -1,10 +1,8 @@
 package fetch
 
 import (
-	"bufio"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/alan/cherry-picker/cmd"
@@ -152,67 +150,25 @@ func updateLastFetchDate(configFile string, config *cmd.Config, saveConfig func(
 	return nil
 }
 
-// processNewPRsInteractively handles the interactive review of new PRs
+// processNewPRsInteractively handles the processing of new PRs based on their labels
 func processNewPRsInteractively(configFile string, newPRs []github.PR, config *cmd.Config, saveConfig func(string, *cmd.Config) error) error {
-	fmt.Printf("Found %d new merged PR(s) to review:\n\n", len(newPRs))
+	fmt.Printf("Found %d new merged PR(s) with cherry-pick labels:\n\n", len(newPRs))
 
-	scanner := bufio.NewScanner(os.Stdin)
 	for _, pr := range newPRs {
-		shouldQuit, err := processSinglePR(pr, config, scanner)
-		if err != nil {
-			return err
-		}
-		if shouldQuit {
-			fmt.Println("Quitting...")
-			return nil
-		}
+		processSinglePR(pr, config)
 	}
 
 	return finalizePRProcessing(configFile, config, saveConfig)
 }
 
-// processSinglePR handles the interactive processing of a single PR
-func processSinglePR(pr github.PR, config *cmd.Config, scanner *bufio.Scanner) (bool, error) {
-	displayPRInfo(pr)
-
-	response, err := getUserResponse(scanner)
-	if err != nil {
-		return false, err
-	}
-
-	return handlePRResponse(pr, config, response)
-}
-
-// displayPRInfo displays information about a PR to the user
-func displayPRInfo(pr github.PR) {
+// processSinglePR handles the processing of a single PR based on its cherry-pick labels
+func processSinglePR(pr github.PR, config *cmd.Config) {
 	fmt.Printf("PR #%d: %s\n", pr.Number, pr.Title)
 	fmt.Printf("URL: %s\n", pr.URL)
-	fmt.Print("Do you want to cherry-pick this PR? [y/n/q]: ")
-}
+	fmt.Printf("Cherry-pick labels: %v\n", pr.CherryPickFor)
 
-// getUserResponse gets and validates user input
-func getUserResponse(scanner *bufio.Scanner) (string, error) {
-	if !scanner.Scan() {
-		return "", fmt.Errorf("failed to read input")
-	}
-	return strings.ToLower(strings.TrimSpace(scanner.Text())), nil
-}
-
-// handlePRResponse processes the user's response for a PR
-func handlePRResponse(pr github.PR, config *cmd.Config, response string) (bool, error) {
-	switch response {
-	case "q", "quit":
-		return true, nil
-	case "y", "yes":
-		addPRForCherryPicking(config, pr)
-		fmt.Printf("✓ Added PR #%d for cherry-picking to %v\n\n", pr.Number, config.TargetBranches)
-	case "n", "no":
-		addIgnoredPR(config, pr)
-		fmt.Printf("✗ Ignored PR #%d\n\n", pr.Number)
-	default:
-		fmt.Println("Invalid response, skipping this PR...")
-	}
-	return false, nil
+	addPRForCherryPicking(config, pr)
+	fmt.Printf("✓ Added PR #%d for cherry-picking to %v\n\n", pr.Number, pr.CherryPickFor)
 }
 
 // finalizePRProcessing saves the config and displays completion message
@@ -225,10 +181,10 @@ func finalizePRProcessing(configFile string, config *cmd.Config, saveConfig func
 	return nil
 }
 
-// addPRForCherryPicking adds a PR to be cherry-picked to all target branches
+// addPRForCherryPicking adds a PR to be cherry-picked to branches specified by labels
 func addPRForCherryPicking(config *cmd.Config, pr github.PR) {
 	branches := make(map[string]cmd.BranchStatus)
-	for _, branch := range config.TargetBranches {
+	for _, branch := range pr.CherryPickFor {
 		branches[branch] = cmd.BranchStatus{Status: "pending"}
 	}
 
@@ -237,15 +193,6 @@ func addPRForCherryPicking(config *cmd.Config, pr github.PR) {
 		Title:    pr.Title,
 		Ignored:  false,
 		Branches: branches,
-	})
-}
-
-// addIgnoredPR adds a PR as ignored
-func addIgnoredPR(config *cmd.Config, pr github.PR) {
-	config.TrackedPRs = append(config.TrackedPRs, cmd.TrackedPR{
-		Number:  pr.Number,
-		Title:   pr.Title,
-		Ignored: true,
 	})
 }
 

@@ -87,7 +87,7 @@ This creates a configuration file with the default source branch set to `main`.
 
 ### Fetch New PRs
 
-Fetch merged PRs from GitHub that need cherry-picking decisions:
+Fetch merged PRs from GitHub that have cherry-pick labels:
 
 ```bash
 export GITHUB_TOKEN="your_github_token"
@@ -97,10 +97,9 @@ export GITHUB_TOKEN="your_github_token"
 This command will:
 
 - Fetch merged PRs to the source branch since the last fetch date (or 30 days ago for first run)
-- Show each PR with title and URL
-- Interactively ask whether you want to pick or ignore each PR
-- For PRs marked to pick: create pending status for all target branches
-- Store your decisions and update the last fetch date
+- Only include PRs with `cherry-pick/*` labels (e.g., `cherry-pick/3.6` for release-3.6)
+- Automatically add PRs to tracking for the branches specified in their labels
+- Update the last fetch date
 
 ### Cherry-Pick PRs
 
@@ -117,22 +116,6 @@ This command will:
 - Perform `git cherry-pick -x` with AI-assisted conflict resolution via Cursor
 - Push the branch and create a cherry-pick PR
 - Update the configuration with the new PR details
-
-### Add PRs Manually
-
-Add a PR to the tracking list manually:
-
-```bash
-./cherry-picker add 12345                    # Add to all target branches
-./cherry-picker add 12345 release-1.0        # Add to specific target branch only
-```
-
-This command will:
-
-- Fetch PR details from GitHub (title, CI status, etc.)
-- Validate the PR exists and is accessible
-- Add the PR to the tracking list with pending status
-- Allow you to add PRs that weren't picked up by `fetch`
 
 ### Ignore PRs
 
@@ -196,8 +179,8 @@ View the current status of all tracked PRs:
 
 This command will:
 
-- Show all non-ignored PRs and their status across target branches
-- Display pending (⏳), picked (✅/🔄), ignored (🚫), and not tracked (❌) states
+- Show all non-ignored PRs and their status across tracked branches
+- Display pending (⏳), picked (✅/🔄), ignored (🚫) states
 - **Fetch PR details from GitHub** (when `GITHUB_TOKEN` is set):
   - PR title and GitHub URL
   - Merge status (✅ merged / ❌ not merged)
@@ -213,7 +196,6 @@ This command will:
 
 ```bash
 Cherry-pick status for myorg/myrepo (source: main)
-Target branches: release-1.0, release-2.0
 
 Fix critical bug (https://github.com/myorg/myrepo/pull/123)
   release-1.0    : ⏳ pending
@@ -244,21 +226,18 @@ Initialize or update configuration:
 - `--org, -o`: GitHub organization or username (auto-detected from git if available)
 - `--repo, -r`: GitHub repository name (auto-detected from git if available)  
 - `--source-branch, -s`: Source branch name (auto-detected from git if available, defaults to "main")
-- `--target-branches, -t`: Target branches for cherry-picking (comma-separated)
 - `--config, -c`: Configuration file path (default: "cherry-picks.yaml")
+
+Target branches are automatically determined from `cherry-pick/*` labels on PRs.
 
 ### fetch
 
-Fetch new merged PRs:
+Fetch merged PRs with cherry-pick labels:
 
 - `--config, -c`: Configuration file path (default: "cherry-picks.yaml")
 - `--since, -s`: Fetch PRs since this date (YYYY-MM-DD), defaults to last fetch date
 
-### add
-
-Add a PR to the tracking list:
-
-- `--config, -c`: Configuration file path (default: "cherry-picks.yaml")
+PRs are automatically added based on their `cherry-pick/*` labels. For example, a PR with label `cherry-pick/3.6` will be tracked for branch `release-3.6`.
 
 ### pick
 
@@ -302,12 +281,6 @@ Initialize with custom source branch:
 
 ```bash
 ./cherry-picker config --org myorg --repo myrepo --source-branch develop
-```
-
-Initialize with target branches:
-
-```bash
-./cherry-picker config --org myorg --repo myrepo --target-branches release-1.0,release-2.0,staging
 ```
 
 Initialize with custom config file:
@@ -440,10 +413,6 @@ The `cherry-picks.yaml` file stores the repository configuration and tracked PRs
 org: myorg
 repo: myrepo
 source_branch: main
-target_branches:
-  - release-1.0
-  - release-2.0
-  - staging
 last_fetch_date: 2024-01-15T10:30:00Z
 tracked_prs:
   - number: 123

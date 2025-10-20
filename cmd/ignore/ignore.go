@@ -1,8 +1,6 @@
 package ignore
 
 import (
-	"fmt"
-
 	"github.com/alan/cherry-picker/cmd"
 	"github.com/alan/cherry-picker/internal/commands"
 	"github.com/spf13/cobra"
@@ -62,11 +60,6 @@ func (ic *IgnoreCommand) Run() error {
 
 	// Determine branches to update
 	branchesToUpdate := commands.DetermineBranchesToUpdate(trackedPR, ic.TargetBranch)
-	if ic.TargetBranch != "" {
-		if err := ic.validateTargetBranch(ic.TargetBranch); err != nil {
-			return err
-		}
-	}
 
 	// Update PR status to ignored
 	ic.updatePRStatusToIgnored(trackedPR, branchesToUpdate)
@@ -79,16 +72,6 @@ func (ic *IgnoreCommand) Run() error {
 	// Display success message
 	commands.DisplaySuccessMessage("ignored", ic.PRNumber, ic.TargetBranch, branchesToUpdate)
 	return nil
-}
-
-// validateTargetBranch checks if the target branch exists in configuration
-func (ic *IgnoreCommand) validateTargetBranch(targetBranch string) error {
-	for _, branch := range ic.Config.TargetBranches {
-		if branch == targetBranch {
-			return nil
-		}
-	}
-	return fmt.Errorf("target branch '%s' is not configured", targetBranch)
 }
 
 // updatePRStatusToIgnored updates the PR status to ignored for specified branches

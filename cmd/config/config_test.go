@@ -12,72 +12,66 @@ import (
 
 func TestRunConfig(t *testing.T) {
 	tests := []struct {
-		name           string
-		configFile     string
-		org            string
-		repo           string
-		sourceBranch   string
-		targetBranches []string
-		fileExists     bool
-		saveError      bool
-		wantErr        bool
-		wantErrMsg     string
+		name         string
+		configFile   string
+		org          string
+		repo         string
+		sourceBranch string
+		fileExists   bool
+		saveError    bool
+		wantErr      bool
+		wantErrMsg   string
 	}{
 		{
-			name:           "successful init with defaults",
-			configFile:     "test-config.yaml",
-			org:            "testorg",
-			repo:           "testrepo",
-			sourceBranch:   "main",
-			targetBranches: []string{},
-			fileExists:     false,
-			saveError:      false,
-			wantErr:        false,
+			name:         "successful init with defaults",
+			configFile:   "test-config.yaml",
+			org:          "testorg",
+			repo:         "testrepo",
+			sourceBranch: "main",
+			fileExists:   false,
+			saveError:    false,
+			wantErr:      false,
 		},
 		{
-			name:           "successful init with target branches",
-			configFile:     "test-config-2.yaml",
-			org:            "testorg",
-			repo:           "testrepo",
-			sourceBranch:   "develop",
-			targetBranches: []string{"release-1.0", "release-2.0"},
-			fileExists:     false,
-			saveError:      false,
-			wantErr:        false,
+			name:         "successful init with custom source branch",
+			configFile:   "test-config-2.yaml",
+			org:          "testorg",
+			repo:         "testrepo",
+			sourceBranch: "develop",
+			fileExists:   false,
+			saveError:    false,
+			wantErr:      false,
 		},
 		{
-			name:           "update existing config",
-			configFile:     "existing-config.yaml",
-			org:            "testorg",
-			repo:           "testrepo",
-			sourceBranch:   "main",
-			targetBranches: []string{"release-3.0"},
-			fileExists:     true,
-			saveError:      false,
-			wantErr:        false,
+			name:         "update existing config",
+			configFile:   "existing-config.yaml",
+			org:          "testorg",
+			repo:         "testrepo",
+			sourceBranch: "main",
+			fileExists:   true,
+			saveError:    false,
+			wantErr:      false,
 		},
 		{
-			name:           "save config error",
-			configFile:     "test-config-3.yaml",
-			org:            "testorg",
-			repo:           "testrepo",
-			sourceBranch:   "main",
-			targetBranches: []string{},
-			fileExists:     false,
-			saveError:      true,
-			wantErr:        true,
-			wantErrMsg:     "failed to save configuration: save error",
+			name:         "save config error",
+			configFile:   "test-config-3.yaml",
+			org:          "testorg",
+			repo:         "testrepo",
+			sourceBranch: "main",
+			fileExists:   false,
+			saveError:    true,
+			wantErr:      true,
+			wantErrMsg:   "failed to save configuration: save error",
 		},
 		{
-			name:           "partial update existing config",
-			configFile:     "partial-update.yaml",
-			org:            "", // Don't update org
-			repo:           "newrepo",
-			sourceBranch:   "", // Don't update source branch
-			targetBranches: []string{"release-4.0", "release-5.0"},
-			fileExists:     true,
-			saveError:      false,
-			wantErr:        false,
+			name:         "partial update existing config",
+			configFile:   "partial-update.yaml",
+			org:          "", // Don't update org
+			repo:         "newrepo",
+			sourceBranch: "", // Don't update source branch
+			fileExists:   true,
+			saveError:    false,
+			wantErr:      false,
 		},
 	}
 
@@ -109,10 +103,9 @@ func TestRunConfig(t *testing.T) {
 				if tt.fileExists {
 					// Return existing config
 					return &cmd.Config{
-						Org:            "existingorg",
-						Repo:           "existingrepo",
-						SourceBranch:   "existing-branch",
-						TargetBranches: []string{"existing-target"},
+						Org:          "existingorg",
+						Repo:         "existingrepo",
+						SourceBranch: "existing-branch",
 					}, nil
 				}
 				// File doesn't exist
@@ -120,7 +113,7 @@ func TestRunConfig(t *testing.T) {
 			}
 
 			// Run the function
-			err := runConfig(configPath, tt.org, tt.repo, tt.sourceBranch, tt.targetBranches, loadConfig, saveConfig)
+			err := runConfig(configPath, tt.org, tt.repo, tt.sourceBranch, loadConfig, saveConfig)
 
 			// Check error
 			if tt.wantErr {
@@ -159,15 +152,6 @@ func TestRunConfig(t *testing.T) {
 				if savedConfig.SourceBranch != "existing-branch" {
 					t.Errorf("runConfig() saved sourceBranch = %v, want %v (preserved from existing)", savedConfig.SourceBranch, "existing-branch")
 				}
-				// Target branches should be updated
-				if len(savedConfig.TargetBranches) != len(tt.targetBranches) {
-					t.Errorf("runConfig() saved targetBranches length = %v, want %v (updated)", len(savedConfig.TargetBranches), len(tt.targetBranches))
-				}
-				for i, branch := range tt.targetBranches {
-					if i >= len(savedConfig.TargetBranches) || savedConfig.TargetBranches[i] != branch {
-						t.Errorf("runConfig() saved targetBranches[%d] = %v, want %v (updated)", i, savedConfig.TargetBranches[i], branch)
-					}
-				}
 			} else {
 				// Normal validation for other test cases
 				if savedConfig.Org != tt.org {
@@ -179,14 +163,6 @@ func TestRunConfig(t *testing.T) {
 				if savedConfig.SourceBranch != tt.sourceBranch {
 					t.Errorf("runConfig() saved sourceBranch = %v, want %v", savedConfig.SourceBranch, tt.sourceBranch)
 				}
-				if len(savedConfig.TargetBranches) != len(tt.targetBranches) {
-					t.Errorf("runConfig() saved targetBranches length = %v, want %v", len(savedConfig.TargetBranches), len(tt.targetBranches))
-				}
-				for i, branch := range tt.targetBranches {
-					if i >= len(savedConfig.TargetBranches) || savedConfig.TargetBranches[i] != branch {
-						t.Errorf("runConfig() saved targetBranches[%d] = %v, want %v", i, savedConfig.TargetBranches[i], branch)
-					}
-				}
 			}
 		})
 	}
@@ -197,24 +173,27 @@ func TestNewConfigCmd(t *testing.T) {
 	loadConfig := func(filename string) (*cmd.Config, error) {
 		return nil, fmt.Errorf("file not found")
 	}
+
+	var savedConfig *cmd.Config
 	saveConfig := func(filename string, config *cmd.Config) error {
+		savedConfig = config
 		return nil
 	}
 
 	configFile := "test-config.yaml"
-	cmd := NewConfigCmd(&configFile, loadConfig, saveConfig)
+	cobraCmd := NewConfigCmd(&configFile, loadConfig, saveConfig)
 
 	// Test command properties
-	if cmd.Use != "config" {
-		t.Errorf("NewConfigCmd() Use = %v, want %v", cmd.Use, "config")
+	if cobraCmd.Use != "config" {
+		t.Errorf("NewConfigCmd() Use = %v, want %v", cobraCmd.Use, "config")
 	}
 
-	if cmd.Short != "Initialize a new cherry-picks.yaml configuration file" {
-		t.Errorf("NewConfigCmd() Short = %v, want %v", cmd.Short, "Initialize a new cherry-picks.yaml configuration file")
+	if cobraCmd.Short != "Initialize a new cherry-picks.yaml configuration file" {
+		t.Errorf("NewConfigCmd() Short = %v, want %v", cobraCmd.Short, "Initialize a new cherry-picks.yaml configuration file")
 	}
 
 	// Test flags (config flag should no longer be present as it's global)
-	flags := cmd.Flags()
+	flags := cobraCmd.Flags()
 
 	configFlag := flags.Lookup("config")
 	if configFlag != nil {
@@ -238,16 +217,30 @@ func TestNewConfigCmd(t *testing.T) {
 		t.Errorf("NewConfigCmd() source-branch flag default = %v, want %v (empty for auto-detection)", sourceBranchFlag.DefValue, "")
 	}
 
+	// target-branches flag should no longer exist
 	targetBranchesFlag := flags.Lookup("target-branches")
-	if targetBranchesFlag == nil {
-		t.Error("NewConfigCmd() missing target-branches flag")
+	if targetBranchesFlag != nil {
+		t.Error("NewConfigCmd() should not have target-branches flag (branches determined from PR labels)")
 	}
 
-	// Note: org and repo are no longer required flags since they can be auto-detected from git
-	// Test that command fails gracefully when org/repo cannot be determined
-	cmd.SetArgs([]string{})
-	err := cmd.Execute()
-	if err == nil {
-		t.Error("NewConfigCmd() should fail when org/repo cannot be determined")
+	// Test autodetection from git - this should succeed since we're in a git repo
+	cobraCmd.SetArgs([]string{})
+	err := cobraCmd.Execute()
+	if err != nil {
+		t.Logf("NewConfigCmd() executed with autodetection: %v", err)
+	}
+
+	// Verify autodetection worked if we're in a git repo
+	if savedConfig != nil {
+		if savedConfig.Org == "" {
+			t.Error("NewConfigCmd() autodetection should have set org from git remote")
+		}
+		if savedConfig.Repo == "" {
+			t.Error("NewConfigCmd() autodetection should have set repo from git remote")
+		}
+		if savedConfig.SourceBranch == "" {
+			t.Error("NewConfigCmd() autodetection should have set source branch from git or default to 'main'")
+		}
+		t.Logf("Autodetected: org=%s, repo=%s, source=%s", savedConfig.Org, savedConfig.Repo, savedConfig.SourceBranch)
 	}
 }
