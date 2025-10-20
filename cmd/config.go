@@ -32,7 +32,6 @@ type BranchStatusType string
 const (
 	BranchStatusPending BranchStatusType = "pending"
 	BranchStatusPicked  BranchStatusType = "picked"
-	BranchStatusIgnored BranchStatusType = "ignored"
 	BranchStatusMerged  BranchStatusType = "merged"
 )
 
@@ -43,8 +42,6 @@ func ParseBranchStatus(s string) BranchStatusType {
 		return BranchStatusPending
 	case "picked":
 		return BranchStatusPicked
-	case "ignored":
-		return BranchStatusIgnored
 	case "merged":
 		return BranchStatusMerged
 	default:
@@ -65,7 +62,6 @@ type Config struct {
 type TrackedPR struct {
 	Number   int                     `yaml:"number"`
 	Title    string                  `yaml:"title"`
-	Ignored  bool                    `yaml:"ignored"`
 	Branches map[string]BranchStatus `yaml:"branches,omitempty"`
 }
 

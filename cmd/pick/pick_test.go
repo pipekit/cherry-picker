@@ -71,7 +71,7 @@ func TestRunPick_PRNotTracked(t *testing.T) {
 	}
 }
 
-func TestRunPick_PRIgnored(t *testing.T) {
+func TestRunPick_PRAlreadyPicked(t *testing.T) {
 	configFile := "test-config.yaml"
 	loadConfig := func(filename string) (*cmd.Config, error) {
 		return &cmd.Config{
@@ -79,7 +79,13 @@ func TestRunPick_PRIgnored(t *testing.T) {
 			Repo:         "testrepo",
 			SourceBranch: "main",
 			TrackedPRs: []cmd.TrackedPR{
-				{Number: 123, Title: "Ignored PR", Ignored: true}, // PR is ignored
+				{
+					Number: 123,
+					Title:  "Already Picked PR",
+					Branches: map[string]cmd.BranchStatus{
+						"release-1.0": {Status: cmd.BranchStatusPicked},
+					},
+				},
 			},
 		}, nil
 	}
@@ -104,10 +110,10 @@ func TestRunPick_PRIgnored(t *testing.T) {
 	err = pickCmd.runWithGitOps(false)
 
 	if err == nil {
-		t.Error("runWithGitOps() expected error for ignored PR, got nil")
+		t.Error("runWithGitOps() expected error for already picked PR, got nil")
 	}
 
-	expectedError := "PR #123 is marked as ignored"
+	expectedError := "cannot be picked"
 	if !strings.Contains(err.Error(), expectedError) {
 		t.Errorf("runWithGitOps() error = %v, want error containing %v", err, expectedError)
 	}
@@ -124,9 +130,8 @@ func TestRunPick_SuccessfulPick(t *testing.T) {
 			SourceBranch: "main",
 			TrackedPRs: []cmd.TrackedPR{
 				{
-					Number:  123,
-					Title:   "Test PR",
-					Ignored: false,
+					Number: 123,
+					Title:  "Test PR",
 					Branches: map[string]cmd.BranchStatus{
 						"release-1.0": {Status: cmd.BranchStatusPending},
 					},

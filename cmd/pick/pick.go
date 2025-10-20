@@ -75,10 +75,6 @@ func (pc *PickCommand) runWithGitOps(performGitOperations bool) error {
 		return err
 	}
 
-	if pr.Ignored {
-		return fmt.Errorf("PR #%d is marked as ignored", pc.PRNumber)
-	}
-
 	// Determine branches to update (3 lines vs ~10 lines)
 	branches := commands.DetermineBranchesToUpdate(pr, pc.TargetBranch)
 
@@ -142,7 +138,7 @@ func (pc *PickCommand) validatePickableStatus(pr *cmd.TrackedPR, branches []stri
 		if !exists {
 			return fmt.Errorf("PR #%d has no status for branch '%s'", pc.PRNumber, branch)
 		}
-		if status.Status != cmd.BranchStatusPending && status.Status != cmd.BranchStatusIgnored {
+		if status.Status != cmd.BranchStatusPending {
 			return fmt.Errorf("PR #%d for branch '%s' cannot be picked (current status: %s)", pc.PRNumber, branch, status.Status)
 		}
 	}

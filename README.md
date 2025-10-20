@@ -98,7 +98,10 @@ This command will:
 
 - Fetch merged PRs to the source branch since the last fetch date (or 30 days ago for first run)
 - Only include PRs with `cherry-pick/*` labels (e.g., `cherry-pick/3.6` for release-3.6)
-- Automatically add PRs to tracking for the branches specified in their labels
+- Check PR comments for existing cherry-pick PRs created by bots (e.g., argo-cd-cherry-pick-bot)
+- Automatically add PRs to tracking:
+  - If bot already created cherry-pick PRs: mark as "picked" or "merged" with CI status
+  - Otherwise: mark as "pending" for manual cherry-picking
 - Update the last fetch date
 
 ### Cherry-Pick PRs
@@ -116,14 +119,6 @@ This command will:
 - Perform `git cherry-pick -x` with AI-assisted conflict resolution via Cursor
 - Push the branch and create a cherry-pick PR
 - Update the configuration with the new PR details
-
-### Ignore PRs
-
-Mark a PR as ignored for specific branches:
-
-```bash
-./cherry-picker ignore 123 release-1.0
-```
 
 ### Retry Failed CI
 
@@ -179,18 +174,17 @@ View the current status of all tracked PRs:
 
 This command will:
 
-- Show all non-ignored PRs and their status across tracked branches
-- Display pending (⏳), picked (✅/🔄), ignored (🚫) states
+- Show all tracked PRs and their status across branches
+- Display pending (⏳), picked (✅/🔄), merged (✅) states
 - **Fetch PR details from GitHub** (when `GITHUB_TOKEN` is set):
   - PR title and GitHub URL
   - Merge status (✅ merged / ❌ not merged)
   - CI status (✅ passing / ❌ failing / 🔄 pending / ❓ unknown)
 - **Show contextual commands** directly under each branch status:
-  - **Pending branches**: `pick` and `ignore` commands
+  - **Pending branches**: `pick` command
   - **Picked branches with failing CI**: `retry` command
   - **Picked branches with passing CI**: `merge` command
-  - **Ignored branches**: `pick` command to un-ignore
-- Provide a summary of total pending, completed, and ignored picks
+- Provide a summary of total pending and completed picks
 
 #### Example Output
 
@@ -200,7 +194,6 @@ Cherry-pick status for myorg/myrepo (source: main)
 Fix critical bug (https://github.com/myorg/myrepo/pull/123)
   release-1.0    : ⏳ pending
                    💡 ./cherry-picker pick 123 release-1.0
-                   💡 ./cherry-picker ignore 123 release-1.0
   release-2.0    : 🔄 picked (https://github.com/myorg/myrepo/pull/456)
                    Fix critical bug (cherry-pick release-2.0) [❌ not merged, ❌ CI failing]
                    💡 ./cherry-picker retry 123 release-2.0
@@ -212,7 +205,7 @@ Add new feature (https://github.com/myorg/myrepo/pull/125)
                    Add new feature (cherry-pick release-2.0) [❌ not merged, ✅ CI passing]
                    💡 ./cherry-picker merge 125 release-2.0
 
-Summary: 2 PR(s) active, 1 branch pick(s) pending, 3 branch pick(s) completed, 0 branch pick(s) ignored
+Summary: 2 PR(s), 1 branch pick(s) pending, 3 branch pick(s) completed (2 picked, 1 merged)
 ```
 
 **Note:** PR details are only fetched when `GITHUB_TOKEN` environment variable is set. Without it, only PR numbers are shown.
@@ -242,12 +235,6 @@ PRs are automatically added based on their `cherry-pick/*` labels. For example, 
 ### pick
 
 Cherry-pick a PR to target branches:
-
-- `--config, -c`: Configuration file path (default: "cherry-picks.yaml")
-
-### ignore
-
-Mark a PR as ignored for specific branches:
 
 - `--config, -c`: Configuration file path (default: "cherry-picks.yaml")
 
@@ -417,7 +404,6 @@ last_fetch_date: 2024-01-15T10:30:00Z
 tracked_prs:
   - number: 123
     title: "Fix critical bug"
-    ignored: false
     branches:
       release-1.0:
         status: pending
@@ -427,11 +413,15 @@ tracked_prs:
           number: 456
           title: "Fix critical bug (cherry-pick release-2.0)"
           ci_status: "passing"
-      staging:
-        status: ignored
   - number: 124
     title: "Add new feature"
-    ignored: true
+    branches:
+      release-1.0:
+        status: picked
+        pr:
+          number: 457
+          title: "Add new feature (cherry-pick release-1.0)"
+          ci_status: "passing"
 ```
 
 ### PR Status Tracking
@@ -440,9 +430,8 @@ Each tracked PR has per-branch status tracking:
 
 - **number**: Original PR number
 - **title**: PR title (fetched from GitHub)
-- **ignored**: `true` if the PR should not be cherry-picked at all
 - **branches**: Map of target branch names to their status:
-  - **status**: `pending`, `picked`, `ignored`, or `merged`
+  - **status**: `pending`, `picked`, or `merged`
   - **pr**: Details of the cherry-pick PR (when status is `picked` or `merged`):
     - **number**: Cherry-pick PR number
     - **title**: Cherry-pick PR title

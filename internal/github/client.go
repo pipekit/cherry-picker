@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -368,6 +369,51 @@ func extractCherryPickBranches(labels []*github.Label) []string {
 		}
 	}
 	return branches
+}
+
+// CherryPickPR represents a cherry-pick PR created by a bot
+type CherryPickPR struct {
+	Number     int
+	Branch     string
+	OriginalPR int
+}
+
+// GetCherryPickPRsFromComments extracts cherry-pick PR numbers from bot comments
+// Looks for patterns like "🍒 Cherry-pick PR created for 3.7: #14944"
+func (c *Client) GetCherryPickPRsFromComments(org, repo string, prNumber int) ([]CherryPickPR, error) {
+	comments, _, err := c.client.Issues.ListComments(c.ctx, org, repo, prNumber, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch comments for PR #%d: %w", prNumber, err)
+	}
+
+	var cherryPickPRs []CherryPickPR
+	// Pattern: 🍒 Cherry-pick PR created for 3.7: #14944
+	// or: Cherry-pick PR created for 3.6: #14945
+	cherryPickPattern := regexp.MustCompile(`Cherry-pick PR created for ([0-9.]+): #(\d+)`)
+
+	for _, comment := range comments {
+		body := comment.GetBody()
+		matches := cherryPickPattern.FindAllStringSubmatch(body, -1)
+
+		for _, match := range matches {
+			if len(match) >= 3 {
+				version := match[1]
+				prNum := match[2]
+
+				// Convert PR number string to int
+				var cherryPickNum int
+				fmt.Sscanf(prNum, "%d", &cherryPickNum)
+
+				cherryPickPRs = append(cherryPickPRs, CherryPickPR{
+					Number:     cherryPickNum,
+					Branch:     "release-" + version,
+					OriginalPR: prNumber,
+				})
+			}
+		}
+	}
+
+	return cherryPickPRs, nil
 }
 
 // CreatePR creates a new pull request

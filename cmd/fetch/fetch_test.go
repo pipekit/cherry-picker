@@ -128,9 +128,8 @@ func TestRunFetch_LoadConfigError(t *testing.T) {
 
 func TestTrackedPRStruct(t *testing.T) {
 	pr := cmd.TrackedPR{
-		Number:  456,
-		Title:   "Test PR Title",
-		Ignored: false,
+		Number: 456,
+		Title:  "Test PR Title",
 		Branches: map[string]cmd.BranchStatus{
 			"release-1.0": {Status: "pending"},
 			"release-2.0": {Status: "merged", PR: &cmd.PickPR{Number: 789, Title: "Cherry-pick", CIStatus: "passing"}},
@@ -139,10 +138,6 @@ func TestTrackedPRStruct(t *testing.T) {
 
 	if pr.Number != 456 {
 		t.Errorf("cmd.TrackedPR.Number = %d, want 456", pr.Number)
-	}
-
-	if pr.Ignored != false {
-		t.Errorf("cmd.TrackedPR.Ignored = %v, want false", pr.Ignored)
 	}
 
 	if len(pr.Branches) != 2 {
@@ -169,31 +164,28 @@ func TestUpdateExistingPRTitles(t *testing.T) {
 		Repo: "testrepo",
 		TrackedPRs: []cmd.TrackedPR{
 			{
-				Number:  123,
-				Title:   "Old Title",
-				Ignored: false,
+				Number: 123,
+				Title:  "Old Title",
 			},
 			{
-				Number:  124,
-				Title:   "Another Old Title",
-				Ignored: false,
+				Number: 124,
+				Title:  "Another Old Title",
 			},
 			{
-				Number:  125,
-				Title:   "Ignored PR Title",
-				Ignored: true, // Should be skipped
+				Number: 125,
+				Title:  "Ignored PR Title",
 			},
 		},
 	}
 
-	// Verify ignored PRs are not processed by checking the function exists and handles the case
+	// Verify we have 3 tracked PRs
 	if len(config.TrackedPRs) != 3 {
 		t.Errorf("Expected 3 tracked PRs, got %d", len(config.TrackedPRs))
 	}
 
 	// Verify the structure is intact
-	if config.TrackedPRs[2].Ignored != true {
-		t.Error("Expected third PR to remain ignored")
+	if config.TrackedPRs[2].Title != "Ignored PR Title" {
+		t.Error("Expected third PR to have the correct title")
 	}
 }
 
@@ -226,17 +218,15 @@ func TestConfigWithTrackedPRs(t *testing.T) {
 		LastFetchDate: &now,
 		TrackedPRs: []cmd.TrackedPR{
 			{
-				Number:  123,
-				Title:   "Test PR 123",
-				Ignored: false,
+				Number: 123,
+				Title:  "Test PR 123",
 				Branches: map[string]cmd.BranchStatus{
 					"release-1.0": {Status: "pending"},
 				},
 			},
 			{
-				Number:  124,
-				Title:   "Test PR 124",
-				Ignored: true,
+				Number: 124,
+				Title:  "Test PR 124",
 			},
 		},
 	}
@@ -249,16 +239,12 @@ func TestConfigWithTrackedPRs(t *testing.T) {
 		t.Errorf("Config.cmd.TrackedPRs[0].Number = %d, want 123", config.TrackedPRs[0].Number)
 	}
 
-	if config.TrackedPRs[0].Ignored != false {
-		t.Errorf("Config.cmd.TrackedPRs[0].Ignored = %v, want false", config.TrackedPRs[0].Ignored)
-	}
-
 	if config.TrackedPRs[0].Branches["release-1.0"].Status != "pending" {
 		t.Errorf("Config.cmd.TrackedPRs[0].Branches[release-1.0].Status = %q, want pending", config.TrackedPRs[0].Branches["release-1.0"].Status)
 	}
 
-	if config.TrackedPRs[1].Ignored != true {
-		t.Errorf("Config.cmd.TrackedPRs[1].Ignored = %v, want true", config.TrackedPRs[1].Ignored)
+	if config.TrackedPRs[1].Title != "Test PR 124" {
+		t.Errorf("Config.cmd.TrackedPRs[1].Title = %v, want Test PR 124", config.TrackedPRs[1].Title)
 	}
 
 	if config.LastFetchDate == nil {

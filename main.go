@@ -5,7 +5,6 @@ import (
 
 	configcmd "github.com/alan/cherry-picker/cmd/config"
 	fetchcmd "github.com/alan/cherry-picker/cmd/fetch"
-	"github.com/alan/cherry-picker/cmd/ignore"
 	"github.com/alan/cherry-picker/cmd/merge"
 	"github.com/alan/cherry-picker/cmd/pick"
 	"github.com/alan/cherry-picker/cmd/retry"
@@ -33,7 +32,6 @@ across GitHub repositories using a YAML configuration file to track state.`,
 	rootCmd.AddCommand(fetchcmd.NewFetchCmd(&configFile, config.LoadConfig, config.SaveConfig))
 	rootCmd.AddCommand(status.NewStatusCmd(&configFile, config.LoadConfig))
 	rootCmd.AddCommand(pick.NewPickCmd(&configFile, config.LoadConfig, config.SaveConfig))
-	rootCmd.AddCommand(ignore.NewIgnoreCmd(&configFile, config.LoadConfig, config.SaveConfig))
 	rootCmd.AddCommand(retry.NewRetryCmd(config.LoadConfig, config.SaveConfig))
 	rootCmd.AddCommand(merge.NewMergeCmd(config.LoadConfig, config.SaveConfig))
 	rootCmd.AddCommand(summary.NewSummaryCmd(&configFile, config.LoadConfig))

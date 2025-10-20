@@ -50,15 +50,13 @@ func TestRunStatus_NoConfig(t *testing.T) {
 	}
 }
 
-func TestRunStatus_NoActivePRs(t *testing.T) {
+func TestRunStatus_NoPRs(t *testing.T) {
 	loadConfig := func(filename string) (*cmd.Config, error) {
 		return &cmd.Config{
 			Org:          "testorg",
 			Repo:         "testrepo",
 			SourceBranch: "main",
-			TrackedPRs: []cmd.TrackedPR{
-				{Number: 123, Title: "Ignored PR", Ignored: true}, // All PRs are ignored
-			},
+			TrackedPRs:   []cmd.TrackedPR{},
 		}, nil
 	}
 
@@ -81,9 +79,8 @@ func TestRunStatus_WithActivePRs(t *testing.T) {
 			LastFetchDate: &now,
 			TrackedPRs: []cmd.TrackedPR{
 				{
-					Number:  123,
-					Title:   "Cherry-pick PR",
-					Ignored: false,
+					Number: 123,
+					Title:  "Cherry-pick PR",
 					Branches: map[string]cmd.BranchStatus{
 						"release-1.0": {Status: "pending"},
 						"release-2.0": {Status: "merged", PR: &cmd.PickPR{Number: 456, Title: "Cherry-pick", CIStatus: "passing"}},
@@ -91,14 +88,8 @@ func TestRunStatus_WithActivePRs(t *testing.T) {
 					},
 				},
 				{
-					Number:  124,
-					Title:   "Ignored PR",
-					Ignored: true, // This should be filtered out
-				},
-				{
-					Number:  125,
-					Title:   "Another PR",
-					Ignored: false,
+					Number: 125,
+					Title:  "Another PR",
 					Branches: map[string]cmd.BranchStatus{
 						"release-1.0": {Status: "picked"},
 						// Missing release-2.0 and staging - should show as "not tracked"
@@ -144,7 +135,6 @@ func TestRunStatus_PRsWithoutBranches(t *testing.T) {
 				{
 					Number:   123,
 					Title:    "PR without branches",
-					Ignored:  false,
 					Branches: map[string]cmd.BranchStatus{}, // Empty branches map
 				},
 			},

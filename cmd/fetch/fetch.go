@@ -154,20 +154,32 @@ func updateLastFetchDate(configFile string, config *cmd.Config, saveConfig func(
 func processNewPRsInteractively(configFile string, newPRs []github.PR, config *cmd.Config, saveConfig func(string, *cmd.Config) error) error {
 	fmt.Printf("Found %d new merged PR(s) with cherry-pick labels:\n\n", len(newPRs))
 
+	client, _, err := commands.InitializeGitHubClient()
+	if err != nil {
+		return fmt.Errorf("failed to initialize GitHub client: %w", err)
+	}
+
 	for _, pr := range newPRs {
-		processSinglePR(pr, config)
+		processSinglePR(pr, config, client)
 	}
 
 	return finalizePRProcessing(configFile, config, saveConfig)
 }
 
 // processSinglePR handles the processing of a single PR based on its cherry-pick labels
-func processSinglePR(pr github.PR, config *cmd.Config) {
+func processSinglePR(pr github.PR, config *cmd.Config, client *github.Client) {
 	fmt.Printf("PR #%d: %s\n", pr.Number, pr.Title)
 	fmt.Printf("URL: %s\n", pr.URL)
 	fmt.Printf("Cherry-pick labels: %v\n", pr.CherryPickFor)
 
-	addPRForCherryPicking(config, pr)
+	// Check for existing cherry-pick PRs created by bot
+	cherryPickPRs, err := client.GetCherryPickPRsFromComments(config.Org, config.Repo, pr.Number)
+	if err != nil {
+		fmt.Printf("⚠️  Warning: failed to fetch cherry-pick PRs from comments: %v\n", err)
+		cherryPickPRs = []github.CherryPickPR{} // Continue with empty list
+	}
+
+	addPRForCherryPicking(config, pr, cherryPickPRs, client)
 	fmt.Printf("✓ Added PR #%d for cherry-picking to %v\n\n", pr.Number, pr.CherryPickFor)
 }
 
@@ -182,16 +194,60 @@ func finalizePRProcessing(configFile string, config *cmd.Config, saveConfig func
 }
 
 // addPRForCherryPicking adds a PR to be cherry-picked to branches specified by labels
-func addPRForCherryPicking(config *cmd.Config, pr github.PR) {
+// If cherry-pick PRs already exist (created by bot), they are added as "picked"
+func addPRForCherryPicking(config *cmd.Config, pr github.PR, cherryPickPRs []github.CherryPickPR, client *github.Client) {
 	branches := make(map[string]cmd.BranchStatus)
+
+	// Create a map of existing cherry-pick PRs by branch
+	existingByBranch := make(map[string]github.CherryPickPR)
+	for _, cp := range cherryPickPRs {
+		existingByBranch[cp.Branch] = cp
+	}
+
 	for _, branch := range pr.CherryPickFor {
-		branches[branch] = cmd.BranchStatus{Status: "pending"}
+		if cherryPick, exists := existingByBranch[branch]; exists {
+			// Cherry-pick PR already exists - fetch its details
+			fmt.Printf("  🍒 Found existing cherry-pick PR #%d for %s\n", cherryPick.Number, branch)
+
+			// Get PR details including CI status
+			prDetails, err := client.GetPRWithDetails(config.Org, config.Repo, cherryPick.Number)
+			if err != nil {
+				fmt.Printf("  ⚠️  Warning: failed to fetch details for PR #%d: %v\n", cherryPick.Number, err)
+				// Add as picked but with unknown status
+				branches[branch] = cmd.BranchStatus{
+					Status: "picked",
+					PR: &cmd.PickPR{
+						Number:   cherryPick.Number,
+						Title:    fmt.Sprintf("%s (cherry-pick %s)", pr.Title, branch),
+						CIStatus: "unknown",
+					},
+				}
+			} else {
+				// Determine status based on merge state
+				status := cmd.BranchStatusPicked
+				if prDetails.Merged {
+					status = cmd.BranchStatusMerged
+				}
+
+				branches[branch] = cmd.BranchStatus{
+					Status: status,
+					PR: &cmd.PickPR{
+						Number:   prDetails.Number,
+						Title:    prDetails.Title,
+						CIStatus: cmd.ParseCIStatus(prDetails.CIStatus),
+					},
+				}
+				fmt.Printf("  ✓ Status: %s, CI: %s\n", status, prDetails.CIStatus)
+			}
+		} else {
+			// No cherry-pick PR exists yet - mark as pending
+			branches[branch] = cmd.BranchStatus{Status: "pending"}
+		}
 	}
 
 	config.TrackedPRs = append(config.TrackedPRs, cmd.TrackedPR{
 		Number:   pr.Number,
 		Title:    pr.Title,
-		Ignored:  false,
 		Branches: branches,
 	})
 }
@@ -205,9 +261,6 @@ func updateExistingPickedPRs(config *cmd.Config) error {
 
 	for i := range config.TrackedPRs {
 		trackedPR := &config.TrackedPRs[i]
-		if trackedPR.Ignored {
-			continue
-		}
 
 		// Check each branch for picked PRs
 		for branch, status := range trackedPR.Branches {

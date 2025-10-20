@@ -15,8 +15,8 @@ func NewStatusCmd(globalConfigFile *string, loadConfig func(string) (*cmd.Config
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show status of tracked PRs across target branches",
-		Long: `Display the current status of all tracked PRs that are not ignored.
-Shows which PRs are pending or picked for each target branch.`,
+		Long: `Display the current status of all tracked PRs.
+Shows which PRs are pending, picked, or merged for each target branch.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runStatus(*globalConfigFile, loadConfig)
 		},
@@ -31,29 +31,17 @@ func runStatus(configFile string, loadConfig func(string) (*cmd.Config, error)) 
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	activePRs := filterActivePRs(config.TrackedPRs)
-	if len(activePRs) == 0 {
-		fmt.Println("No active PRs to track.")
+	if len(config.TrackedPRs) == 0 {
+		fmt.Println("No PRs to track.")
 		return nil
 	}
 
-	sortPRsByNumber(activePRs)
+	sortPRsByNumber(config.TrackedPRs)
 	displayRepositoryHeader(config)
-	displayAllPRStatuses(activePRs, config, configFile)
-	displayStatusSummary(activePRs)
+	displayAllPRStatuses(config.TrackedPRs, config, configFile)
+	displayStatusSummary(config.TrackedPRs)
 
 	return nil
-}
-
-// filterActivePRs returns only non-ignored PRs
-func filterActivePRs(trackedPRs []cmd.TrackedPR) []cmd.TrackedPR {
-	var activePRs []cmd.TrackedPR
-	for _, pr := range trackedPRs {
-		if !pr.Ignored {
-			activePRs = append(activePRs, pr)
-		}
-	}
-	return activePRs
 }
 
 // sortPRsByNumber sorts PRs by number for consistent output
@@ -130,9 +118,8 @@ func displayBranchStatus(branch string, status cmd.BranchStatus, config *cmd.Con
 	switch status.Status {
 	case "pending":
 		fmt.Printf("  %-15s: ⏳ pending\n", branch)
-		// Show pick and ignore commands
+		// Show pick command
 		fmt.Printf("  %-15s  💡 %s%s pick %d %s\n", "", executablePath, configFlag, prNumber, branch)
-		fmt.Printf("  %-15s  💡 %s%s ignore %d %s\n", "", executablePath, configFlag, prNumber, branch)
 	case "picked":
 		if status.PR != nil {
 			prURL := fmt.Sprintf("https://github.com/%s/%s/pull/%d", config.Org, config.Repo, status.PR.Number)
@@ -175,8 +162,6 @@ func displayBranchStatus(branch string, status cmd.BranchStatus, config *cmd.Con
 		}
 	case "merged":
 		fmt.Printf("  %-15s: ✅ merged\n", branch)
-	case "ignored":
-		fmt.Printf("  %-15s: 🚫 ignored\n", branch)
 	default:
 		fmt.Printf("  %-15s: ❓ unknown status: %s\n", branch, status.Status)
 	}
@@ -187,7 +172,6 @@ func displayStatusSummary(prs []cmd.TrackedPR) {
 	totalPending := 0
 	totalPicked := 0
 	totalMerged := 0
-	totalIgnored := 0
 	for _, pr := range prs {
 		for _, status := range pr.Branches {
 			switch status.Status {
@@ -197,15 +181,13 @@ func displayStatusSummary(prs []cmd.TrackedPR) {
 				totalPicked++
 			case "merged":
 				totalMerged++
-			case "ignored":
-				totalIgnored++
 			}
 		}
 	}
 
 	totalCompleted := totalPicked + totalMerged
-	fmt.Printf("Summary: %d PR(s) active, %d branch pick(s) pending, %d branch pick(s) completed (%d picked, %d merged), %d branch pick(s) ignored\n",
-		len(prs), totalPending, totalCompleted, totalPicked, totalMerged, totalIgnored)
+	fmt.Printf("Summary: %d PR(s), %d branch pick(s) pending, %d branch pick(s) completed (%d picked, %d merged)\n",
+		len(prs), totalPending, totalCompleted, totalPicked, totalMerged)
 }
 
 // getConfigFlag returns the config flag if not using default
