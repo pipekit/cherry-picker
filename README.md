@@ -80,10 +80,19 @@ If you can merge PRs in the GitHub UI but the `merge` command fails:
 Create a new `cherry-picks.yaml` configuration file:
 
 ```bash
-./cherry-picker config --org myorg --repo myrepo
+./cherry-picker config --org myorg --repo myrepo --ai-assistant cursor-agent
 ```
 
-This creates a configuration file with the default source branch set to `main`.
+This creates a configuration file with the default source branch set to `main` and configures the AI assistant for conflict resolution.
+
+#### AI Assistant Configuration
+
+The `--ai-assistant` flag is **required** and specifies which command-line AI tool to use for interactive conflict resolution. Supported options:
+
+- **cursor-agent**: Anthropic's Cursor AI agent CLI
+- **claude**: Anthropic's Claude CLI
+
+See the [AI Assistant Setup](#ai-assistant-setup) section below for installation and configuration details.
 
 ### Fetch New PRs
 
@@ -104,21 +113,23 @@ This command will:
   - Otherwise: mark as "pending" for manual cherry-picking
 - Update the last fetch date
 
-### Cherry-Pick PRs
+### Cherry-Pick PRs (AI-Assisted)
 
-Cherry-pick a PR to specific target branches:
+Cherry-pick PRs that the automated bot couldn't handle due to conflicts:
 
 ```bash
 ./cherry-picker pick 123 release-1.0
 ./cherry-picker pick 123  # Pick to all pending branches
 ```
 
-This command will:
+This command handles cherry-picks that failed with the automated bot. It will:
 
 - Create a new branch (`cherry-pick-<prnum>-<target>`)
-- Perform `git cherry-pick -x` with AI-assisted conflict resolution via Cursor
+- Perform `git cherry-pick -x` with AI-assisted conflict resolution via cursor-agent
 - Push the branch and create a cherry-pick PR
 - Update the configuration with the new PR details
+
+**Note:** This is specifically for PRs marked as "pending" where the bot hasn't created a cherry-pick PR yet, typically because of merge conflicts.
 
 ### Retry Failed CI
 
@@ -219,6 +230,7 @@ Initialize or update configuration:
 - `--org, -o`: GitHub organization or username (auto-detected from git if available)
 - `--repo, -r`: GitHub repository name (auto-detected from git if available)  
 - `--source-branch, -s`: Source branch name (auto-detected from git if available, defaults to "main")
+- `--ai-assistant, -a`: **Required.** AI assistant command for conflict resolution (e.g., "cursor-agent", "claude")
 - `--config, -c`: Configuration file path (default: "cherry-picks.yaml")
 
 Target branches are automatically determined from `cherry-pick/*` labels on PRs.
@@ -234,9 +246,11 @@ PRs are automatically added based on their `cherry-pick/*` labels. For example, 
 
 ### pick
 
-Cherry-pick a PR to target branches:
+AI-assisted cherry-pick for PRs that bots couldn't handle:
 
 - `--config, -c`: Configuration file path (default: "cherry-picks.yaml")
+
+This command is specifically for handling cherry-picks with conflicts that the automated bot couldn't resolve. It uses the configured AI assistant (cursor-agent, claude, or custom) for interactive AI-assisted conflict resolution.
 
 ### retry
 
@@ -267,13 +281,13 @@ Generate development progress summary for a target branch:
 Initialize with custom source branch:
 
 ```bash
-./cherry-picker config --org myorg --repo myrepo --source-branch develop
+./cherry-picker config --org myorg --repo myrepo --source-branch develop --ai-assistant cursor-agent
 ```
 
-Initialize with custom config file:
+Initialize with custom config file and claude CLI:
 
 ```bash
-./cherry-picker config --config my-picks.yaml --org myorg --repo myrepo
+./cherry-picker config --config my-picks.yaml --org myorg --repo myrepo --ai-assistant claude
 ```
 
 Fetch PRs since a specific date:
@@ -281,6 +295,60 @@ Fetch PRs since a specific date:
 ```bash
 ./cherry-picker fetch --since 2024-01-01
 ```
+
+## AI Assistant Setup
+
+Cherry-picker requires an AI assistant CLI tool for interactive conflict resolution. You must configure one during initialization.
+
+### Option 1: cursor-agent (Anthropic Cursor Agent)
+
+Install cursor-agent:
+
+```bash
+# Install via npm
+npm install -g @anthropic-ai/cursor-agent
+
+# Login (required for first-time use)
+cursor-agent login
+```
+
+Configure cherry-picker to use cursor-agent:
+
+```bash
+./cherry-picker config --ai-assistant cursor-agent
+```
+
+**Documentation**: https://docs.cursor.com/agent
+
+### Option 2: claude (Anthropic Claude CLI)
+
+Install claude CLI:
+
+```bash
+# Install via npm
+npm install -g @anthropic-ai/claude-cli
+
+# Login (required for first-time use)
+claude login
+```
+
+Configure cherry-picker to use claude:
+
+```bash
+./cherry-picker config --ai-assistant claude
+```
+
+**Documentation**: https://docs.anthropic.com/claude/docs/claude-cli
+
+### Using a Custom AI Assistant
+
+You can configure any command-line tool that provides an interactive session:
+
+```bash
+./cherry-picker config --ai-assistant "your-custom-ai-tool"
+```
+
+The tool will be launched with stdin/stdout connected for interactive conflict resolution.
 
 ## AI-Assisted Conflict Resolution
 
@@ -305,8 +373,8 @@ The initial context + interactive approach gives you:
 
 ### Requirements
 
-- **Cursor installed**: The `cursor-agent` CLI must be available
-- **Authentication**: Run `cursor-agent login` to authenticate if needed
+- **AI Assistant configured**: Set via `--ai-assistant` flag during `config` command
+- **Authentication**: Run `<ai-tool> login` to authenticate (e.g., `cursor-agent login` or `claude login`)
 - **Git Context**: The AI can see your repository state and conflicted files
 
 ### Example Workflow
@@ -378,18 +446,23 @@ For effective AI conflict resolution:
 
 When the interactive AI session encounters issues:
 
-1. **Session Failure**: If `cursor-agent` fails to launch, you'll get clear instructions for manual resolution
+1. **Session Failure**: If the configured AI assistant fails to launch, you'll get clear instructions for manual resolution
 2. **User Control**: You can exit the AI session at any time and handle conflicts manually
 3. **Git State**: Cherry-pick remains in progress, allowing you to continue with standard Git tools
 4. **No Automated Changes**: The interactive approach doesn't make changes without your approval
 
-If `cursor-agent` is not available, the cherry-pick process will abort with a clear error message:
+If the AI assistant is not available, the cherry-pick process will abort with a clear error message:
 
 **Example failure output:**
 ```bash
-❌ Failed to launch cursor-agent: exec: "cursor-agent": executable file not found in $PATH
+❌ Failed to launch AI assistant: exec: "cursor-agent": executable file not found in $PATH
    - You can resolve conflicts manually using standard Git tools
    - Run 'git cherry-pick --abort' to cancel, or resolve and 'git cherry-pick --continue'
+```
+
+**If AI assistant is not configured:**
+```bash
+❌ Failed to launch AI assistant: AI assistant command not configured. Set it using: cherry-picker config --ai-assistant <command>
 ```
 
 ## Configuration File
@@ -400,6 +473,7 @@ The `cherry-picks.yaml` file stores the repository configuration and tracked PRs
 org: myorg
 repo: myrepo
 source_branch: main
+ai_assistant_command: cursor-agent
 last_fetch_date: 2024-01-15T10:30:00Z
 tracked_prs:
   - number: 123

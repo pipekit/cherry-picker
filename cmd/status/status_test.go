@@ -53,10 +53,11 @@ func TestRunStatus_NoConfig(t *testing.T) {
 func TestRunStatus_NoPRs(t *testing.T) {
 	loadConfig := func(filename string) (*cmd.Config, error) {
 		return &cmd.Config{
-			Org:          "testorg",
-			Repo:         "testrepo",
-			SourceBranch: "main",
-			TrackedPRs:   []cmd.TrackedPR{},
+			Org:                "testorg",
+			AIAssistantCommand: "cursor-agent",
+			Repo:               "testrepo",
+			SourceBranch:       "main",
+			TrackedPRs:         []cmd.TrackedPR{},
 		}, nil
 	}
 
@@ -73,10 +74,11 @@ func TestRunStatus_WithActivePRs(t *testing.T) {
 	now := time.Now()
 	loadConfig := func(filename string) (*cmd.Config, error) {
 		return &cmd.Config{
-			Org:           "testorg",
-			Repo:          "testrepo",
-			SourceBranch:  "main",
-			LastFetchDate: &now,
+			Org:                "testorg",
+			Repo:               "testrepo",
+			SourceBranch:       "main",
+			AIAssistantCommand: "cursor-agent",
+			LastFetchDate:      &now,
 			TrackedPRs: []cmd.TrackedPR{
 				{
 					Number: 123,
@@ -111,10 +113,11 @@ func TestRunStatus_WithActivePRs(t *testing.T) {
 func TestRunStatus_EmptyConfig(t *testing.T) {
 	loadConfig := func(filename string) (*cmd.Config, error) {
 		return &cmd.Config{
-			Org:          "testorg",
-			Repo:         "testrepo",
-			SourceBranch: "main",
-			TrackedPRs:   []cmd.TrackedPR{},
+			Org:                "testorg",
+			AIAssistantCommand: "cursor-agent",
+			Repo:               "testrepo",
+			SourceBranch:       "main",
+			TrackedPRs:         []cmd.TrackedPR{},
 		}, nil
 	}
 
@@ -128,9 +131,10 @@ func TestRunStatus_EmptyConfig(t *testing.T) {
 func TestRunStatus_PRsWithoutBranches(t *testing.T) {
 	loadConfig := func(filename string) (*cmd.Config, error) {
 		return &cmd.Config{
-			Org:          "testorg",
-			Repo:         "testrepo",
-			SourceBranch: "main",
+			Org:                "testorg",
+			AIAssistantCommand: "cursor-agent",
+			Repo:               "testrepo",
+			SourceBranch:       "main",
 			TrackedPRs: []cmd.TrackedPR{
 				{
 					Number:   123,

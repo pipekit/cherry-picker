@@ -57,9 +57,10 @@ func TestRunFetch_NoToken(t *testing.T) {
 
 	loadConfig := func(filename string) (*cmd.Config, error) {
 		return &cmd.Config{
-			Org:          "testorg",
-			Repo:         "testrepo",
-			SourceBranch: "main",
+			Org:                "testorg",
+			AIAssistantCommand: "cursor-agent",
+			Repo:               "testrepo",
+			SourceBranch:       "main",
 		}, nil
 	}
 	saveConfig := func(filename string, config *cmd.Config) error {
@@ -84,9 +85,10 @@ func TestRunFetch_InvalidDateFormat(t *testing.T) {
 
 	loadConfig := func(filename string) (*cmd.Config, error) {
 		return &cmd.Config{
-			Org:          "testorg",
-			Repo:         "testrepo",
-			SourceBranch: "main",
+			Org:                "testorg",
+			AIAssistantCommand: "cursor-agent",
+			Repo:               "testrepo",
+			SourceBranch:       "main",
 		}, nil
 	}
 	saveConfig := func(filename string, config *cmd.Config) error {
@@ -160,8 +162,9 @@ func TestTrackedPRStruct(t *testing.T) {
 func TestUpdateExistingPRTitles(t *testing.T) {
 	// This test verifies the logic but can't test actual GitHub API calls
 	config := &cmd.Config{
-		Org:  "testorg",
-		Repo: "testrepo",
+		Org:                "testorg",
+		Repo:               "testrepo",
+		AIAssistantCommand: "cursor-agent",
 		TrackedPRs: []cmd.TrackedPR{
 			{
 				Number: 123,
@@ -212,10 +215,11 @@ func TestBranchStatusStruct(t *testing.T) {
 func TestConfigWithTrackedPRs(t *testing.T) {
 	now := time.Now()
 	config := cmd.Config{
-		Org:           "testorg",
-		Repo:          "testrepo",
-		SourceBranch:  "main",
-		LastFetchDate: &now,
+		Org:                "testorg",
+		Repo:               "testrepo",
+		SourceBranch:       "main",
+		AIAssistantCommand: "cursor-agent",
+		LastFetchDate:      &now,
 		TrackedPRs: []cmd.TrackedPR{
 			{
 				Number: 123,

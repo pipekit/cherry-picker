@@ -31,11 +31,14 @@ func NewPickCmd(globalConfigFile *string, loadConfig func(string) (*cmd.Config, 
 
 	cobraCmd := &cobra.Command{
 		Use:   "pick <pr-number> [target-branch]",
-		Short: "Mark a PR as picked for a specific target branch",
-		Long: `Mark a PR as picked for cherry-picking to a specific target branch.
-If no target branch is specified, the PR will be marked as picked for all target branches.
+		Short: "AI-assisted cherry-pick for PRs that bots couldn't handle",
+		Long: `Cherry-pick a PR to target branches with AI-assisted conflict resolution.
+This command is for handling cherry-picks that the automated bot couldn't complete due to conflicts.
 
-The PR must be currently tracked and have pending status for the target branch(es).`,
+If no target branch is specified, the PR will be cherry-picked to all pending branches.
+The PR must be currently tracked and have pending status for the target branch(es).
+
+Conflicts are automatically resolved using cursor-agent AI assistance.`,
 		Args:         cobra.RangeArgs(1, 2),
 		SilenceUsage: true,
 		RunE: func(cobraCmd *cobra.Command, args []string) error {
@@ -64,11 +67,11 @@ The PR must be currently tracked and have pending status for the target branch(e
 
 // Run executes the pick command
 func (pc *PickCommand) Run() error {
-	return pc.runWithGitOps(true)
+	return pc.runPick()
 }
 
-// runWithGitOps executes pick with optional git operations (for testing)
-func (pc *PickCommand) runWithGitOps(performGitOperations bool) error {
+// runPick executes the full cherry-pick workflow
+func (pc *PickCommand) runPick() error {
 	// Find and validate PR (4 lines vs ~15 lines)
 	pr, err := commands.FindAndValidatePR(pc.Config, pc.PRNumber)
 	if err != nil {
@@ -78,47 +81,70 @@ func (pc *PickCommand) runWithGitOps(performGitOperations bool) error {
 	// Determine branches to update (3 lines vs ~10 lines)
 	branches := commands.DetermineBranchesToUpdate(pr, pc.TargetBranch)
 
-	// Validate branch status (1 line vs ~15 lines)
+	// Validate branch status
 	if err := pc.validatePickableStatus(pr, branches); err != nil {
 		return err
 	}
 
 	// Git operations
-	if performGitOperations {
-		if err := commands.ValidateGitRepository(); err != nil {
-			return err
-		}
+	if err := commands.ValidateGitRepository(); err != nil {
+		return err
+	}
 
-		sha, err := pc.getCommitSHA(pc.PRNumber)
+	sha, err := pc.getCommitSHA(pc.PRNumber)
+	if err != nil {
+		return err
+	}
+
+	if err := pc.performGitFetch(); err != nil {
+		return fmt.Errorf("failed to fetch from remote: %w", err)
+	}
+
+	// Perform cherry-pick for each branch with immediate saving
+	for _, branch := range branches {
+		result, err := pc.performCherryPickForBranch(sha, branch, pc.PRNumber, pr.Title)
 		if err != nil {
 			return err
 		}
 
-		if err := pc.performGitFetch(); err != nil {
-			return fmt.Errorf("failed to fetch from remote: %w", err)
+		// Update and save immediately after each successful cherry-pick
+		pc.updateSingleBranchStatus(pr, branch, result)
+		if err := pc.SaveConfigWithErrorHandling(pc.Config); err != nil {
+			fmt.Printf("⚠️  Warning: failed to save config after successful cherry-pick to %s: %v\n", branch, err)
+		} else {
+			fmt.Printf("💾 Saved progress for branch %s\n", branch)
 		}
-
-		// Perform cherry-pick for each branch with immediate saving
-		for _, branch := range branches {
-			result, err := pc.performCherryPickForBranch(sha, branch, pc.PRNumber, pr.Title)
-			if err != nil {
-				return err
-			}
-
-			// Update and save immediately after each successful cherry-pick
-			pc.updateSingleBranchStatus(pr, branch, result)
-			if err := pc.SaveConfigWithErrorHandling(pc.Config); err != nil {
-				fmt.Printf("⚠️  Warning: failed to save config after successful cherry-pick to %s: %v\n", branch, err)
-			} else {
-				fmt.Printf("💾 Saved progress for branch %s\n", branch)
-			}
-		}
-	} else {
-		// Mark as picked without git operations (for testing)
-		pc.updatePRStatus(pr, branches)
 	}
 
-	// Final save and display (2 lines vs 8 lines)
+	// Final save and display
+	if err := pc.SaveConfigWithErrorHandling(pc.Config); err != nil {
+		return err
+	}
+
+	commands.DisplaySuccessMessage("picked", pc.PRNumber, pc.TargetBranch, branches)
+	return nil
+}
+
+// runPickForTest executes pick for testing without git operations
+func (pc *PickCommand) runPickForTest() error {
+	// Find and validate PR
+	pr, err := commands.FindAndValidatePR(pc.Config, pc.PRNumber)
+	if err != nil {
+		return err
+	}
+
+	// Determine branches to update
+	branches := commands.DetermineBranchesToUpdate(pr, pc.TargetBranch)
+
+	// Validate branch status
+	if err := pc.validatePickableStatus(pr, branches); err != nil {
+		return err
+	}
+
+	// Mark as picked without git operations (for testing)
+	pc.updatePRStatus(pr, branches)
+
+	// Save config
 	if err := pc.SaveConfigWithErrorHandling(pc.Config); err != nil {
 		return err
 	}
@@ -307,14 +333,14 @@ func (pc *PickCommand) performCherryPick(sha string) error {
 		if pc.isConflictError(err) {
 			fmt.Printf("⚠️  Cherry-pick conflicts detected. Attempting Cursor AI-assisted resolution...\n")
 
-			if resolveErr := pc.launchInteractiveCursorAgent(sha); resolveErr != nil {
-				fmt.Printf("\n❌ Failed to launch cursor-agent: %v\n", resolveErr)
+			if resolveErr := pc.launchInteractiveAIAssistant(sha); resolveErr != nil {
+				fmt.Printf("\n❌ Failed to launch AI assistant: %v\n", resolveErr)
 				fmt.Printf("   - You can resolve conflicts manually using standard Git tools\n")
 				fmt.Printf("   - Run 'git cherry-pick --abort' to cancel, or resolve and 'git cherry-pick --continue'\n")
-				return fmt.Errorf("cherry-pick failed and cursor-agent launch failed: %w (original: %v)", resolveErr, err)
+				return fmt.Errorf("cherry-pick failed and AI assistant launch failed: %w (original: %v)", resolveErr, err)
 			}
 
-			fmt.Println("\n🔍 Cursor-agent session completed.")
+			fmt.Println("\n🔍 AI assistant session completed.")
 			fmt.Println("   - Assuming conflicts have been resolved during the AI session")
 			fmt.Println("   - Checking if cherry-pick is complete...")
 
@@ -366,8 +392,12 @@ func (pc *PickCommand) isConflictError(err error) bool {
 	return false
 }
 
-// launchInteractiveCursorAgent launches cursor-agent with initial context, then hands control to user
-func (pc *PickCommand) launchInteractiveCursorAgent(sha string) error {
+// launchInteractiveAIAssistant launches configured AI assistant with initial context, then hands control to user
+func (pc *PickCommand) launchInteractiveAIAssistant(sha string) error {
+	if pc.Config.AIAssistantCommand == "" {
+		return fmt.Errorf("AI assistant command not configured. Set it using: cherry-picker config --ai-assistant <command>")
+	}
+
 	conflictedFiles, err := pc.getConflictedFiles()
 	if err != nil {
 		return fmt.Errorf("failed to get conflicted files: %w", err)
@@ -378,7 +408,7 @@ func (pc *PickCommand) launchInteractiveCursorAgent(sha string) error {
 	}
 
 	fmt.Printf("📋 Found %d conflicted file(s): %v\n", len(conflictedFiles), conflictedFiles)
-	fmt.Printf("🤖 Launching cursor-agent with initial context...\n")
+	fmt.Printf("🤖 Launching %s with initial context...\n", pc.Config.AIAssistantCommand)
 
 	initialPrompt, err := pc.createInitialConflictPrompt(conflictedFiles, sha)
 	if err != nil {
@@ -396,18 +426,18 @@ func (pc *PickCommand) launchInteractiveCursorAgent(sha string) error {
 	fmt.Printf("%s\n", initialPrompt)
 	fmt.Printf("%s\n\n", separator)
 
-	fmt.Printf("🤖 Starting cursor-agent session...\n")
+	fmt.Printf("🤖 Starting %s session...\n", pc.Config.AIAssistantCommand)
 	fmt.Printf("💡 Copy the context above and paste it to start the conversation with the AI.\n")
-	fmt.Printf("   Press Enter to launch cursor-agent...")
+	fmt.Printf("   Press Enter to launch %s...\n", pc.Config.AIAssistantCommand)
 	fmt.Scanln()
 
-	cmd := exec.Command("cursor-agent")
+	cmd := exec.Command(pc.Config.AIAssistantCommand)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("cursor-agent failed: %w", err)
+		return fmt.Errorf("%s failed: %w", pc.Config.AIAssistantCommand, err)
 	}
 
 	return nil

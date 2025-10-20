@@ -24,7 +24,7 @@ func TestNewPickCmd(t *testing.T) {
 		t.Errorf("NewPickCmd() Use = %v, want %v", cmd.Use, "pick <pr-number> [target-branch]")
 	}
 
-	if cmd.Short != "Mark a PR as picked for a specific target branch" {
+	if cmd.Short != "AI-assisted cherry-pick for PRs that bots couldn't handle" {
 		t.Errorf("NewPickCmd() Short = %v, want expected short description", cmd.Short)
 	}
 }
@@ -33,10 +33,11 @@ func TestRunPick_PRNotTracked(t *testing.T) {
 	configFile := "test-config.yaml"
 	loadConfig := func(filename string) (*cmd.Config, error) {
 		return &cmd.Config{
-			Org:          "testorg",
-			Repo:         "testrepo",
-			SourceBranch: "main",
-			TrackedPRs:   []cmd.TrackedPR{}, // No PRs tracked
+			Org:                "testorg",
+			AIAssistantCommand: "cursor-agent",
+			Repo:               "testrepo",
+			SourceBranch:       "main",
+			TrackedPRs:         []cmd.TrackedPR{}, // No PRs tracked
 		}, nil
 	}
 	saveConfig := func(filename string, config *cmd.Config) error {
@@ -59,7 +60,7 @@ func TestRunPick_PRNotTracked(t *testing.T) {
 	}
 	pickCmd.Config = config
 
-	err = pickCmd.runWithGitOps(false) // Skip git operations for testing
+	err = pickCmd.runPickForTest() // Skip git operations for testing
 
 	if err == nil {
 		t.Error("runWithGitOps() expected error for non-tracked PR, got nil")
@@ -75,9 +76,10 @@ func TestRunPick_PRAlreadyPicked(t *testing.T) {
 	configFile := "test-config.yaml"
 	loadConfig := func(filename string) (*cmd.Config, error) {
 		return &cmd.Config{
-			Org:          "testorg",
-			Repo:         "testrepo",
-			SourceBranch: "main",
+			Org:                "testorg",
+			AIAssistantCommand: "cursor-agent",
+			Repo:               "testrepo",
+			SourceBranch:       "main",
 			TrackedPRs: []cmd.TrackedPR{
 				{
 					Number: 123,
@@ -107,15 +109,15 @@ func TestRunPick_PRAlreadyPicked(t *testing.T) {
 	}
 	pickCmd.Config = config
 
-	err = pickCmd.runWithGitOps(false)
+	err = pickCmd.runPickForTest()
 
 	if err == nil {
-		t.Error("runWithGitOps() expected error for already picked PR, got nil")
+		t.Error("runPickForTest() expected error for already picked PR, got nil")
 	}
 
 	expectedError := "cannot be picked"
 	if !strings.Contains(err.Error(), expectedError) {
-		t.Errorf("runWithGitOps() error = %v, want error containing %v", err, expectedError)
+		t.Errorf("runPickForTest() error = %v, want error containing %v", err, expectedError)
 	}
 }
 
@@ -125,9 +127,10 @@ func TestRunPick_SuccessfulPick(t *testing.T) {
 
 	loadConfig := func(filename string) (*cmd.Config, error) {
 		return &cmd.Config{
-			Org:          "testorg",
-			Repo:         "testrepo",
-			SourceBranch: "main",
+			Org:                "testorg",
+			AIAssistantCommand: "cursor-agent",
+			Repo:               "testrepo",
+			SourceBranch:       "main",
 			TrackedPRs: []cmd.TrackedPR{
 				{
 					Number: 123,
@@ -158,7 +161,7 @@ func TestRunPick_SuccessfulPick(t *testing.T) {
 	}
 	pickCmd.Config = config
 
-	err = pickCmd.runWithGitOps(false) // Skip git operations for testing
+	err = pickCmd.runPickForTest() // Skip git operations for testing
 
 	if err != nil {
 		t.Errorf("runWithGitOps() unexpected error: %v", err)

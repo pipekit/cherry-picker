@@ -103,18 +103,20 @@ func TestSaveConfig(t *testing.T) {
 		{
 			name: "valid config",
 			config: &cmd.Config{
-				Org:          "testorg",
-				Repo:         "testrepo",
-				SourceBranch: "main",
+				Org:                "testorg",
+				Repo:               "testrepo",
+				SourceBranch:       "main",
+				AIAssistantCommand: "cursor-agent",
 			},
 			wantErr: false,
 		},
 		{
 			name: "config with different source branch",
 			config: &cmd.Config{
-				Org:          "testorg",
-				Repo:         "testrepo",
-				SourceBranch: "develop",
+				Org:                "testorg",
+				Repo:               "testrepo",
+				SourceBranch:       "develop",
+				AIAssistantCommand: "claude",
 			},
 			wantErr: false,
 		},

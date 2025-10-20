@@ -51,11 +51,12 @@ func ParseBranchStatus(s string) BranchStatusType {
 
 // Config represents the structure of cherry-picks.yaml
 type Config struct {
-	Org           string      `yaml:"org"`
-	Repo          string      `yaml:"repo"`
-	SourceBranch  string      `yaml:"source_branch"`
-	LastFetchDate *time.Time  `yaml:"last_fetch_date,omitempty"`
-	TrackedPRs    []TrackedPR `yaml:"tracked_prs,omitempty"`
+	Org                string      `yaml:"org"`
+	Repo               string      `yaml:"repo"`
+	SourceBranch       string      `yaml:"source_branch"`
+	AIAssistantCommand string      `yaml:"ai_assistant_command"`
+	LastFetchDate      *time.Time  `yaml:"last_fetch_date,omitempty"`
+	TrackedPRs         []TrackedPR `yaml:"tracked_prs,omitempty"`
 }
 
 // TrackedPR represents a PR that we're tracking for cherry-picking
