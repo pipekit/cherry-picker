@@ -41,6 +41,8 @@ For **fine-grained personal access tokens**, the following repository permission
 - **Actions**: Read and Write
 - **Metadata**: Read
 
+Fewer permissions can be granted but some features will not work. Issues Read/Write is for a future release/issue tracking feature.
+
 ### Token Setup
 
 1. Create a fine-grained personal access token at: https://github.com/settings/personal-access-tokens/new
