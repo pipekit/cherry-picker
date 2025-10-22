@@ -49,13 +49,53 @@ func NewClient(ctx context.Context, token string) *Client {
 	}
 }
 
-// GetMergedPRs fetches merged PRs to the specified branch since the given date
+// GetMergedPRs fetches all merged PRs to the specified branch with cherry-pick labels
 func (c *Client) GetMergedPRs(org, repo, branch string, since time.Time) ([]PR, error) {
-	opts := &github.PullRequestListOptions{
-		State:     "closed",
-		Base:      branch,
-		Sort:      "updated",
-		Direction: "desc",
+	labels, err := c.ListLabels(org, repo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list labels: %w", err)
+	}
+
+	cherryPickLabels := filterCherryPickLabels(labels)
+	if len(cherryPickLabels) == 0 {
+		return []PR{}, nil
+	}
+
+	query := buildSearchQuery(org, repo, branch, cherryPickLabels)
+	return c.searchPRs(query)
+}
+
+// filterCherryPickLabels filters labels to only those starting with "cherry-pick"
+func filterCherryPickLabels(labels []*github.Label) []string {
+	var cherryPickLabels []string
+	for _, label := range labels {
+		if strings.HasPrefix(label.GetName(), "cherry-pick") {
+			cherryPickLabels = append(cherryPickLabels, label.GetName())
+		}
+	}
+	return cherryPickLabels
+}
+
+// buildSearchQuery constructs a GitHub search query for merged PRs with cherry-pick labels
+func buildSearchQuery(org, repo, branch string, labels []string) string {
+	var parts []string
+	parts = append(parts, fmt.Sprintf("repo:%s/%s", org, repo))
+	parts = append(parts, "is:pr")
+	parts = append(parts, "is:merged")
+	parts = append(parts, fmt.Sprintf("base:%s", branch))
+
+	for _, label := range labels {
+		parts = append(parts, fmt.Sprintf("label:\"%s\"", label))
+	}
+
+	return strings.Join(parts, " ")
+}
+
+// searchPRs executes a search query and returns matching PRs
+func (c *Client) searchPRs(query string) ([]PR, error) {
+	opts := &github.SearchOptions{
+		Sort:  "updated",
+		Order: "desc",
 		ListOptions: github.ListOptions{
 			PerPage: 100,
 		},
@@ -64,38 +104,37 @@ func (c *Client) GetMergedPRs(org, repo, branch string, since time.Time) ([]PR, 
 	var allPRs []PR
 
 	for {
-		prs, resp, err := c.client.PullRequests.List(c.ctx, org, repo, opts)
+		result, resp, err := c.client.Search.Issues(c.ctx, query, opts)
 		if err != nil {
-			return nil, fmt.Errorf("failed to fetch pull requests: %w", err)
+			return nil, fmt.Errorf("failed to search PRs: %w", err)
 		}
 
-		for _, pr := range prs {
-			// Skip if not merged
-			if pr.MergedAt == nil {
+		for _, issue := range result.Issues {
+			if !issue.IsPullRequest() {
 				continue
 			}
 
-			// Skip if merged before our since date
-			if pr.MergedAt.Before(since) {
-				// Since we're sorting by updated desc, if we hit an old PR, we can stop
-				return allPRs, nil
-			}
-
-			// Extract cherry-pick target branches from labels
-			cherryPickBranches := extractCherryPickBranches(pr.Labels)
-
-			// Only include PRs that have cherry-pick labels
+			cherryPickBranches := extractCherryPickBranchesFromLabels(issue.Labels)
 			if len(cherryPickBranches) == 0 {
 				continue
 			}
 
+			var sha string
+			if issue.PullRequestLinks != nil && issue.PullRequestLinks.URL != nil {
+				prNum := issue.GetNumber()
+				pr, _, err := c.client.PullRequests.Get(c.ctx, extractOrgFromIssue(issue), extractRepoFromIssue(issue), prNum)
+				if err == nil && pr.MergeCommitSHA != nil {
+					sha = pr.GetMergeCommitSHA()
+				}
+			}
+
 			allPRs = append(allPRs, PR{
-				Number:        pr.GetNumber(),
-				Title:         pr.GetTitle(),
-				URL:           pr.GetHTMLURL(),
-				SHA:           pr.GetMergeCommitSHA(),
-				Merged:        pr.MergedAt != nil,
-				CIStatus:      "unknown", // CI status not fetched for listing
+				Number:        issue.GetNumber(),
+				Title:         issue.GetTitle(),
+				URL:           issue.GetHTMLURL(),
+				SHA:           sha,
+				Merged:        issue.ClosedAt != nil,
+				CIStatus:      "unknown",
 				CherryPickFor: cherryPickBranches,
 			})
 		}
@@ -107,6 +146,40 @@ func (c *Client) GetMergedPRs(org, repo, branch string, since time.Time) ([]PR, 
 	}
 
 	return allPRs, nil
+}
+
+// extractCherryPickBranchesFromLabels extracts target branches from cherry-pick/* labels
+// For example, "cherry-pick/3.6" becomes "release-3.6"
+func extractCherryPickBranchesFromLabels(labels []*github.Label) []string {
+	var branches []string
+	for _, label := range labels {
+		labelName := label.GetName()
+		if strings.HasPrefix(labelName, "cherry-pick/") {
+			version := strings.TrimPrefix(labelName, "cherry-pick/")
+			branch := "release-" + version
+			branches = append(branches, branch)
+		}
+	}
+	return branches
+}
+
+// extractOrgFromIssue extracts org from issue repository URL
+func extractOrgFromIssue(issue *github.Issue) string {
+	if issue.Repository == nil {
+		return ""
+	}
+	if issue.Repository.Owner == nil {
+		return ""
+	}
+	return issue.Repository.Owner.GetLogin()
+}
+
+// extractRepoFromIssue extracts repo name from issue
+func extractRepoFromIssue(issue *github.Issue) string {
+	if issue.Repository == nil {
+		return ""
+	}
+	return issue.Repository.GetName()
 }
 
 // GetOpenPRs fetches open PRs targeting the specified branch
@@ -356,21 +429,6 @@ func isDCOCheck(checkName string) bool {
 	return false
 }
 
-// extractCherryPickBranches extracts target branches from cherry-pick/* labels
-// For example, "cherry-pick/3.6" becomes "release-3.6"
-func extractCherryPickBranches(labels []*github.Label) []string {
-	var branches []string
-	for _, label := range labels {
-		labelName := label.GetName()
-		if strings.HasPrefix(labelName, "cherry-pick/") {
-			version := strings.TrimPrefix(labelName, "cherry-pick/")
-			branch := "release-" + version
-			branches = append(branches, branch)
-		}
-	}
-	return branches
-}
-
 // CherryPickPR represents a cherry-pick PR created by a bot
 type CherryPickPR struct {
 	Number     int
@@ -392,8 +450,8 @@ func (c *Client) GetCherryPickPRsFromComments(org, repo string, prNumber int) ([
 	var cherryPickPRs []CherryPickPR
 	// Pattern for successful cherry-pick: 🍒 Cherry-pick PR created for 3.7: #14944
 	successPattern := regexp.MustCompile(`Cherry-pick PR created for ([0-9.]+): #(\d+)`)
-	// Pattern for failed cherry-pick: various failure messages
-	failurePattern := regexp.MustCompile(`(?i)cherry-pick.*failed.*for ([0-9.]+)|failed.*cherry-pick.*([0-9.]+)`)
+	// Pattern for failed cherry-pick: ❌ Cherry-pick failed for 3.7.
+	failurePattern := regexp.MustCompile(`Cherry-pick failed for ([0-9.]+)\.`)
 
 	for _, comment := range comments {
 		body := comment.GetBody()
@@ -422,20 +480,74 @@ func (c *Client) GetCherryPickPRsFromComments(org, repo string, prNumber int) ([
 		failMatches := failurePattern.FindAllStringSubmatch(body, -1)
 		for _, match := range failMatches {
 			if len(match) >= 2 {
-				// Try both capture groups since the pattern has alternatives
 				version := match[1]
-				if version == "" && len(match) >= 3 {
-					version = match[2]
-				}
+				cherryPickPRs = append(cherryPickPRs, CherryPickPR{
+					Number:     0, // No PR number for failures
+					Branch:     "release-" + version,
+					OriginalPR: prNumber,
+					Failed:     true,
+				})
+			}
+		}
+	}
 
-				if version != "" {
-					cherryPickPRs = append(cherryPickPRs, CherryPickPR{
-						Number:     0, // No PR number for failures
-						Branch:     "release-" + version,
-						OriginalPR: prNumber,
-						Failed:     true,
-					})
-				}
+	return cherryPickPRs, nil
+}
+
+// SearchManualCherryPickPRs searches for manually created cherry-pick PRs by title pattern
+// Looks for PRs with titles like "cherry-pick: ... (#14894)" targeting release branches
+func (c *Client) SearchManualCherryPickPRs(org, repo string, prNumber int, branches []string) ([]CherryPickPR, error) {
+	var cherryPickPRs []CherryPickPR
+
+	// Search for PRs containing "cherry-pick" and the PR number in title
+	query := fmt.Sprintf("repo:%s/%s is:pr cherry-pick %d in:title", org, repo, prNumber)
+
+	opts := &github.SearchOptions{
+		ListOptions: github.ListOptions{
+			PerPage: 100,
+		},
+	}
+
+	result, _, err := c.client.Search.Issues(c.ctx, query, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search for manual cherry-pick PRs: %w", err)
+	}
+
+	// Pattern to match titles containing "cherry-pick #14894" or "(cherry-pick #14894"
+	titlePattern := regexp.MustCompile(fmt.Sprintf(`(?i)cherry-pick\s+#?%d`, prNumber))
+
+	for _, issue := range result.Issues {
+		if !issue.IsPullRequest() {
+			continue
+		}
+
+		// Skip the original PR itself
+		if issue.GetNumber() == prNumber {
+			continue
+		}
+
+		// Check if title matches cherry-pick pattern
+		if !titlePattern.MatchString(issue.GetTitle()) {
+			continue
+		}
+
+		// Get the full PR to determine target branch
+		pr, _, err := c.client.PullRequests.Get(c.ctx, org, repo, issue.GetNumber())
+		if err != nil {
+			continue
+		}
+
+		// Check if this PR targets one of our tracked branches
+		targetBranch := pr.GetBase().GetRef()
+		for _, branch := range branches {
+			if targetBranch == branch {
+				cherryPickPRs = append(cherryPickPRs, CherryPickPR{
+					Number:     pr.GetNumber(),
+					Branch:     targetBranch,
+					OriginalPR: prNumber,
+					Failed:     false,
+				})
+				break
 			}
 		}
 	}
@@ -604,6 +716,31 @@ func (c *Client) ListTags(org, repo string) ([]string, error) {
 	}
 
 	return allTags, nil
+}
+
+// ListLabels fetches all labels from the repository
+func (c *Client) ListLabels(org, repo string) ([]*github.Label, error) {
+	opts := &github.ListOptions{
+		PerPage: 100,
+	}
+
+	var allLabels []*github.Label
+
+	for {
+		labels, resp, err := c.client.Issues.ListLabels(c.ctx, org, repo, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list labels: %w", err)
+		}
+
+		allLabels = append(allLabels, labels...)
+
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+
+	return allLabels, nil
 }
 
 // GetCommitsSince gets commits on a branch since a specific tag/commit (equivalent to git log tag..branch)

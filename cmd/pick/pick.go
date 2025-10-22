@@ -2,6 +2,7 @@ package pick
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
@@ -110,9 +111,9 @@ func (pc *PickCommand) runPick() error {
 		// Update and save immediately after each successful cherry-pick
 		pc.updateSingleBranchStatus(pr, branch, result)
 		if err := pc.SaveConfigWithErrorHandling(pc.Config); err != nil {
-			fmt.Printf("⚠️  Warning: failed to save config after successful cherry-pick to %s: %v\n", branch, err)
+			slog.Warn("Failed to save config after successful cherry-pick", "branch", branch, "error", err)
 		} else {
-			fmt.Printf("💾 Saved progress for branch %s\n", branch)
+			slog.Info("Saved progress for branch", "branch", branch)
 		}
 	}
 
@@ -197,7 +198,7 @@ func (pc *PickCommand) updateSingleBranchStatus(pr *cmd.TrackedPR, branch string
 
 // performGitFetch fetches the latest changes from remote
 func (pc *PickCommand) performGitFetch() error {
-	fmt.Println("Fetching latest changes from remote...")
+	slog.Info("Fetching latest changes from remote")
 	cmd := exec.Command("git", "fetch", "origin")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -263,7 +264,7 @@ func (pc *PickCommand) performCherryPickForBranch(sha, branch string, prNumber i
 
 // checkoutBranch switches to the target branch and force updates it to match upstream
 func (pc *PickCommand) checkoutBranch(branch string) error {
-	fmt.Printf("Checking out branch: %s\n", branch)
+	slog.Info("Checking out branch", "branch", branch)
 
 	checkoutCmd := exec.Command("git", "checkout", branch)
 	checkoutCmd.Stdout = os.Stdout
@@ -272,7 +273,7 @@ func (pc *PickCommand) checkoutBranch(branch string) error {
 		return fmt.Errorf("failed to checkout branch %s: %w", branch, err)
 	}
 
-	fmt.Printf("Updating branch %s to match upstream origin/%s\n", branch, branch)
+	slog.Info("Updating branch to match upstream", "branch", branch, "upstream", fmt.Sprintf("origin/%s", branch))
 	resetCmd := exec.Command("git", "reset", "--hard", fmt.Sprintf("origin/%s", branch))
 	resetCmd.Stdout = os.Stdout
 	resetCmd.Stderr = os.Stderr
@@ -285,7 +286,7 @@ func (pc *PickCommand) checkoutBranch(branch string) error {
 
 // createAndCheckoutBranch creates a new branch and checks it out, recreating if it already exists
 func (pc *PickCommand) createAndCheckoutBranch(branchName string) error {
-	fmt.Printf("Creating and checking out branch: %s\n", branchName)
+	slog.Info("Creating and checking out branch", "branch", branchName)
 
 	// Delete local branch if it exists
 	deleteLocalCmd := exec.Command("git", "branch", "-D", branchName)
@@ -304,7 +305,7 @@ func (pc *PickCommand) createAndCheckoutBranch(branchName string) error {
 
 // pushBranch pushes a branch to origin
 func (pc *PickCommand) pushBranch(branchName string) error {
-	fmt.Printf("Pushing branch: %s\n", branchName)
+	slog.Info("Pushing branch", "branch", branchName)
 	cmd := exec.Command("git", "push", "origin", branchName)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -333,7 +334,7 @@ func (pc *PickCommand) createCherryPickPR(headBranch, baseBranch string, origina
 
 // performCherryPick executes the git cherry-pick command with Cursor integration for conflicts
 func (pc *PickCommand) performCherryPick(sha string) error {
-	fmt.Printf("Cherry-picking commit: %s\n", sha)
+	slog.Info("Cherry-picking commit", "sha", sha)
 	cmd := exec.Command("git", "cherry-pick", "-x", "--signoff", sha)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -341,16 +342,16 @@ func (pc *PickCommand) performCherryPick(sha string) error {
 	err := cmd.Run()
 	if err != nil {
 		if pc.isConflictError(err) {
-			fmt.Printf("⚠️  Cherry-pick conflicts detected. Attempting Cursor AI-assisted resolution...\n")
+			slog.Warn("Cherry-pick conflicts detected, attempting AI-assisted resolution")
 
 			if resolveErr := pc.launchInteractiveAIAssistant(sha); resolveErr != nil {
-				fmt.Printf("\n❌ Failed to launch AI assistant: %v\n", resolveErr)
+				slog.Error("Failed to launch AI assistant", "error", resolveErr)
 				fmt.Printf("   - You can resolve conflicts manually using standard Git tools\n")
 				fmt.Printf("   - Run 'git cherry-pick --abort' to cancel, or resolve and 'git cherry-pick --continue'\n")
 				return fmt.Errorf("cherry-pick failed and AI assistant launch failed: %w (original: %v)", resolveErr, err)
 			}
 
-			fmt.Println("\n🔍 AI assistant session completed.")
+			slog.Info("AI assistant session completed")
 			fmt.Println("   - Assuming conflicts have been resolved during the AI session")
 			fmt.Println("   - Checking if cherry-pick is complete...")
 
@@ -360,18 +361,18 @@ func (pc *PickCommand) performCherryPick(sha string) error {
 			}
 
 			if len(remainingConflicts) > 0 {
-				fmt.Printf("⚠️  The following files still have conflicts: %v\n", remainingConflicts)
+				slog.Warn("Files still have conflicts after AI session", "conflicted_files", remainingConflicts)
 				fmt.Println("   - Please resolve these manually and run 'git cherry-pick --continue'")
 				fmt.Println("   - Or run 'git cherry-pick --abort' to cancel")
 				return fmt.Errorf("conflicts still remain after AI session")
 			}
 
 			if _, err := os.Stat(".git/CHERRY_PICK_HEAD"); os.IsNotExist(err) {
-				fmt.Printf("✅ Cherry-pick appears to be already complete\n")
+				slog.Info("Cherry-pick appears to be already complete")
 				return nil
 			}
 
-			fmt.Printf("🎯 No conflicts remaining. Completing cherry-pick commit...\n")
+			slog.Info("No conflicts remaining, completing cherry-pick commit")
 			continueCmd := exec.Command("git", "cherry-pick", "--continue")
 			continueCmd.Stdout = os.Stdout
 			continueCmd.Stderr = os.Stderr
@@ -379,7 +380,7 @@ func (pc *PickCommand) performCherryPick(sha string) error {
 				return fmt.Errorf("failed to complete cherry-pick: %w", continueErr)
 			}
 
-			fmt.Printf("✅ Cherry-pick completed with AI-assisted conflict resolution\n")
+			slog.Info("Cherry-pick completed with AI-assisted conflict resolution")
 			return nil
 		}
 
@@ -417,8 +418,8 @@ func (pc *PickCommand) launchInteractiveAIAssistant(sha string) error {
 		return fmt.Errorf("no conflicted files found")
 	}
 
-	fmt.Printf("📋 Found %d conflicted file(s): %v\n", len(conflictedFiles), conflictedFiles)
-	fmt.Printf("🤖 Launching %s with initial context...\n", pc.Config.AIAssistantCommand)
+	slog.Info("Found conflicted files", "count", len(conflictedFiles), "files", conflictedFiles)
+	slog.Info("Launching AI assistant with initial context", "command", pc.Config.AIAssistantCommand)
 
 	initialPrompt, err := pc.createInitialConflictPrompt(conflictedFiles, sha)
 	if err != nil {
@@ -430,7 +431,7 @@ func (pc *PickCommand) launchInteractiveAIAssistant(sha string) error {
 	fmt.Printf("   - You can then guide the resolution process\n")
 	fmt.Printf("   - Exit the agent when you're satisfied with the resolution\n\n")
 
-	fmt.Printf("🎯 Sending initial context to AI...\n")
+	slog.Info("Sending initial context to AI")
 	separator := strings.Repeat("=", 80)
 	fmt.Printf("\n%s\n", separator)
 	fmt.Printf("%s\n", initialPrompt)
@@ -570,14 +571,14 @@ func (pc *PickCommand) moveSignedOffByLinesToEnd() error {
 	finalMessage := newMessage.String()
 
 	if len(signedOffByLines) > 0 {
-		fmt.Printf("📝 Found %d Signed-off-by line(s):\n", len(signedOffByLines))
+		slog.Info("Found Signed-off-by lines", "count", len(signedOffByLines))
 		for _, line := range signedOffByLines {
 			fmt.Printf("   %s\n", strings.TrimSpace(line))
 		}
 	}
 
 	if finalMessage != originalMessage {
-		fmt.Printf("📝 Moving Signed-off-by lines to end of commit message\n")
+		slog.Info("Moving Signed-off-by lines to end of commit message")
 
 		amendCmd := exec.Command("git", "commit", "--amend", "-m", finalMessage)
 		amendCmd.Stdout = os.Stdout

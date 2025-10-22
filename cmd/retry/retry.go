@@ -2,6 +2,7 @@ package retry
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/alan/cherry-picker/cmd"
 	"github.com/alan/cherry-picker/internal/commands"
@@ -116,8 +117,7 @@ func (rc *RetryCommand) retryBranchCI(trackedPR *cmd.TrackedPR, targetBranch str
 
 // retryBranchOperation is the core operation for retrying CI on a single branch
 func (rc *RetryCommand) retryBranchOperation(client *github.Client, config *cmd.Config, trackedPR *cmd.TrackedPR, branchName string, branchStatus cmd.BranchStatus) error {
-	fmt.Printf("Retrying failed CI for PR #%d (cherry-pick PR #%d) on branch %s...\n",
-		trackedPR.Number, branchStatus.PR.Number, branchName)
+	slog.Info("Retrying failed CI for PR", "original_pr", trackedPR.Number, "cherry_pick_pr", branchStatus.PR.Number, "branch", branchName)
 
 	err := client.RetryFailedWorkflows(config.Org, config.Repo, branchStatus.PR.Number)
 	if err != nil {
@@ -125,8 +125,7 @@ func (rc *RetryCommand) retryBranchOperation(client *github.Client, config *cmd.
 			trackedPR.Number, branchName, branchStatus.PR.Number, err)
 	}
 
-	fmt.Printf("✅ Successfully triggered retry for failed CI jobs on PR #%d branch %s (cherry-pick PR #%d)\n",
-		trackedPR.Number, branchName, branchStatus.PR.Number)
+	slog.Info("Successfully triggered retry for failed CI jobs", "original_pr", trackedPR.Number, "branch", branchName, "cherry_pick_pr", branchStatus.PR.Number)
 
 	return nil
 }

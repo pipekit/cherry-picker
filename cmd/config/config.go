@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 
 	"os/exec"
 	"regexp"
@@ -87,15 +88,15 @@ func runConfigWithGitDetection(configFile, org, repo, sourceBranch, aiAssistantC
 		if gitInfo, err := detectGitRepoInfo(); err == nil {
 			if finalOrg == "" {
 				finalOrg = gitInfo.Org
-				fmt.Printf("🔍 Auto-detected organization: %s\n", finalOrg)
+				slog.Info("Auto-detected organization", "org", finalOrg)
 			}
 			if finalRepo == "" {
 				finalRepo = gitInfo.Repo
-				fmt.Printf("🔍 Auto-detected repository: %s\n", finalRepo)
+				slog.Info("Auto-detected repository", "repo", finalRepo)
 			}
 			if finalSourceBranch == "" {
 				finalSourceBranch = gitInfo.SourceBranch
-				fmt.Printf("🔍 Auto-detected source branch: %s\n", finalSourceBranch)
+				slog.Info("Auto-detected source branch", "branch", finalSourceBranch)
 			}
 		} else {
 			// Fall back to defaults for source branch

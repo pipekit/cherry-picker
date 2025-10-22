@@ -2,6 +2,7 @@ package fetch
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
@@ -82,33 +83,85 @@ func determineSinceDate(sinceDate string, lastFetchDate *time.Time) (time.Time, 
 
 // fetchAndProcessPRs handles the main logic of fetching and processing PRs
 func fetchAndProcessPRs(configFile string, config *cmd.Config, since time.Time, token string, saveConfig func(string, *cmd.Config) error) error {
-	// Update existing picked PRs with latest details
-	if err := updateExistingPickedPRs(config); err != nil {
-		fmt.Printf("Warning: Failed to update existing picked PRs: %v\n", err)
-	}
-
-	prs, err := fetchPRsFromGitHub(config, since)
+	client, _, err := commands.InitializeGitHubClient()
 	if err != nil {
 		return err
 	}
 
-	if len(prs) == 0 {
-		fmt.Println("No new merged PRs found.")
-		return updateLastFetchDate(configFile, config, saveConfig)
+	allPRs, err := fetchPRsFromGitHub(config, since)
+	if err != nil {
+		return err
 	}
 
-	newPRs := filterNewPRs(prs, config.TrackedPRs)
-	if len(newPRs) == 0 {
-		fmt.Println("No new PRs to review (all already tracked).")
-		return updateLastFetchDate(configFile, config, saveConfig)
+	slog.Info("Fetched PRs from GitHub", "count", len(allPRs))
+
+	prByNumber := make(map[int]github.PR)
+	for _, pr := range allPRs {
+		prByNumber[pr.Number] = pr
 	}
 
-	return processNewPRsInteractively(configFile, newPRs, config, saveConfig)
+	configUpdated := false
+	newPRsAdded := 0
+
+	// Add new PRs from search results
+	for _, pr := range allPRs {
+		if !isPRTracked(config, pr.Number) {
+			slog.Info("Found new PR", "number", pr.Number, "title", pr.Title, "url", pr.URL, "cherry_pick_labels", pr.CherryPickFor)
+			addNewPR(config, pr)
+			newPRsAdded++
+		}
+	}
+
+	// Sync all tracked PRs with GitHub (including those without labels anymore)
+	for i := range config.TrackedPRs {
+		trackedPR := &config.TrackedPRs[i]
+		// If PR is in search results, use that data
+		if pr, found := prByNumber[trackedPR.Number]; found {
+			if syncBranchesWithGitHub(config, pr) {
+				configUpdated = true
+			}
+		} else {
+			// PR not in search results - must have no cherry-pick labels
+			// Create empty PR struct to sync (will remove all pending/failed branches)
+			emptyPR := github.PR{
+				Number:        trackedPR.Number,
+				CherryPickFor: []string{}, // No labels
+			}
+			if syncBranchesWithGitHub(config, emptyPR) {
+				configUpdated = true
+			}
+		}
+	}
+
+	// Remove PRs with no branches left
+	prsRemoved := removeEmptyPRs(config)
+	if prsRemoved > 0 {
+		slog.Info("Removed PRs with no branches", "count", prsRemoved)
+		configUpdated = true
+	}
+
+	if newPRsAdded > 0 {
+		slog.Info("Added new PRs", "count", newPRsAdded)
+	}
+	if len(config.TrackedPRs) > 0 {
+		slog.Info("Updating tracked PRs", "count", len(config.TrackedPRs))
+		if updateAllTrackedPRs(config, client) {
+			configUpdated = true
+		}
+	}
+
+	if configUpdated || newPRsAdded > 0 {
+		slog.Info("Configuration updated", "total_tracked_prs", len(config.TrackedPRs))
+	} else {
+		slog.Info("No changes detected")
+	}
+
+	return updateLastFetchDate(configFile, config, saveConfig)
 }
 
 // fetchPRsFromGitHub fetches PRs from GitHub API
 func fetchPRsFromGitHub(config *cmd.Config, since time.Time) ([]github.PR, error) {
-	fmt.Printf("Fetching merged PRs from %s/%s since %s...\n", config.Org, config.Repo, since.Format("2006-01-02"))
+	slog.Info("Fetching merged PRs with cherry-pick labels", "org", config.Org, "repo", config.Repo)
 
 	client, _, err := commands.InitializeGitHubClient()
 	if err != nil {
@@ -123,133 +176,166 @@ func fetchPRsFromGitHub(config *cmd.Config, since time.Time) ([]github.PR, error
 	return prs, nil
 }
 
-// filterNewPRs filters out PRs that are already tracked
-func filterNewPRs(prs []github.PR, trackedPRs []cmd.TrackedPR) []github.PR {
-	existingPRs := make(map[int]bool)
-	for _, trackedPR := range trackedPRs {
-		existingPRs[trackedPR.Number] = true
-	}
+// updateAllTrackedPRs updates all existing tracked PRs by checking their cherry-pick status
+func updateAllTrackedPRs(config *cmd.Config, client *github.Client) bool {
+	updated := false
 
-	var newPRs []github.PR
-	for _, pr := range prs {
-		if !existingPRs[pr.Number] {
-			newPRs = append(newPRs, pr)
+	for i := range config.TrackedPRs {
+		trackedPR := &config.TrackedPRs[i]
+		slog.Info("Checking tracked PR", "pr", trackedPR.Number)
+
+		cherryPickPRs, err := client.GetCherryPickPRsFromComments(config.Org, config.Repo, trackedPR.Number)
+		if err != nil {
+			slog.Warn("Failed to fetch cherry-pick PRs from comments", "pr", trackedPR.Number, "error", err)
+			cherryPickPRs = []github.CherryPickPR{}
+		}
+
+		// Get list of branches we're tracking for this PR
+		var branches []string
+		for branch := range trackedPR.Branches {
+			branches = append(branches, branch)
+		}
+
+		// Search for manual cherry-pick PRs by title
+		manualCherryPicks, err := client.SearchManualCherryPickPRs(config.Org, config.Repo, trackedPR.Number, branches)
+		if err != nil {
+			slog.Warn("Failed to search for manual cherry-pick PRs", "pr", trackedPR.Number, "error", err)
+		} else {
+			// Merge manual cherry-picks with bot cherry-picks
+			cherryPickPRs = append(cherryPickPRs, manualCherryPicks...)
+		}
+
+		existingByBranch := make(map[string]github.CherryPickPR)
+		for _, cp := range cherryPickPRs {
+			existingByBranch[cp.Branch] = cp
+		}
+
+		for branch, currentStatus := range trackedPR.Branches {
+			if currentStatus.Status == cmd.BranchStatusMerged {
+				slog.Info("Skipping merged tracked PR", "pr", trackedPR.Number, "branch", branch)
+				continue
+			}
+			slog.Info("Checking tracked PR", "pr", trackedPR.Number, "branch", branch)
+
+			if cherryPick, cpExists := existingByBranch[branch]; cpExists {
+				newStatus := determineBranchStatus(cherryPick, config, client, trackedPR)
+				if currentStatus.Status != newStatus.Status ||
+					(newStatus.PR != nil && (currentStatus.PR == nil || currentStatus.PR.Number != newStatus.PR.Number)) {
+					trackedPR.Branches[branch] = newStatus
+					updated = true
+					slog.Info("Updated branch status", "pr", trackedPR.Number, "branch", branch,
+						"old_status", currentStatus.Status, "new_status", newStatus.Status)
+				} else if currentStatus.Status == cmd.BranchStatusPicked && currentStatus.PR != nil {
+					prDetails, err := client.GetPRWithDetails(config.Org, config.Repo, currentStatus.PR.Number)
+					if err == nil {
+						ciChanged := false
+						if currentStatus.PR.CIStatus != cmd.ParseCIStatus(prDetails.CIStatus) {
+							currentStatus.PR.CIStatus = cmd.ParseCIStatus(prDetails.CIStatus)
+							ciChanged = true
+						}
+						if prDetails.Merged && currentStatus.Status != cmd.BranchStatusMerged {
+							currentStatus.Status = cmd.BranchStatusMerged
+							trackedPR.Branches[branch] = currentStatus
+							updated = true
+							slog.Info("Cherry-pick PR merged", "pr", trackedPR.Number, "branch", branch, "cherry_pick_pr", currentStatus.PR.Number)
+						} else if ciChanged {
+							trackedPR.Branches[branch] = currentStatus
+							updated = true
+							slog.Info("Cherry-pick PR CI status updated", "pr", trackedPR.Number, "branch", branch, "ci_status", currentStatus.PR.CIStatus)
+						}
+					}
+				}
+			} else {
+				slog.Info("No existing Cherry-pick for tracked PR", "pr", trackedPR.Number, "branch", branch)
+			}
 		}
 	}
 
-	return newPRs
+	return updated
 }
 
-// updateLastFetchDate updates the last fetch date and saves the config
-func updateLastFetchDate(configFile string, config *cmd.Config, saveConfig func(string, *cmd.Config) error) error {
-	now := time.Now()
-	config.LastFetchDate = &now
-	if err := saveConfig(configFile, config); err != nil {
-		return fmt.Errorf("failed to save configuration: %w", err)
+// isPRTracked checks if a PR is already being tracked
+func isPRTracked(config *cmd.Config, prNumber int) bool {
+	for _, trackedPR := range config.TrackedPRs {
+		if trackedPR.Number == prNumber {
+			return true
+		}
 	}
-	return nil
+	return false
 }
 
-// processNewPRsInteractively handles the processing of new PRs based on their labels
-func processNewPRsInteractively(configFile string, newPRs []github.PR, config *cmd.Config, saveConfig func(string, *cmd.Config) error) error {
-	fmt.Printf("Found %d new merged PR(s) with cherry-pick labels:\n\n", len(newPRs))
+// removeEmptyPRs removes PRs that have no branches left
+// Returns the number of PRs removed
+func removeEmptyPRs(config *cmd.Config) int {
+	var remaining []cmd.TrackedPR
+	removed := 0
 
-	client, _, err := commands.InitializeGitHubClient()
-	if err != nil {
-		return fmt.Errorf("failed to initialize GitHub client: %w", err)
+	for _, pr := range config.TrackedPRs {
+		if len(pr.Branches) == 0 {
+			slog.Info("Removing PR with no branches", "pr", pr.Number)
+			removed++
+		} else {
+			remaining = append(remaining, pr)
+		}
 	}
 
-	for _, pr := range newPRs {
-		processSinglePR(pr, config, client)
-	}
-
-	return finalizePRProcessing(configFile, config, saveConfig)
+	config.TrackedPRs = remaining
+	return removed
 }
 
-// processSinglePR handles the processing of a single PR based on its cherry-pick labels
-func processSinglePR(pr github.PR, config *cmd.Config, client *github.Client) {
-	fmt.Printf("PR #%d: %s\n", pr.Number, pr.Title)
-	fmt.Printf("URL: %s\n", pr.URL)
-	fmt.Printf("Cherry-pick labels: %v\n", pr.CherryPickFor)
+// syncBranchesWithGitHub syncs tracked branches with current GitHub labels
+// Returns true if any changes were made
+func syncBranchesWithGitHub(config *cmd.Config, pr github.PR) bool {
+	updated := false
 
-	// Check for existing cherry-pick PRs created by bot
-	cherryPickPRs, err := client.GetCherryPickPRsFromComments(config.Org, config.Repo, pr.Number)
-	if err != nil {
-		fmt.Printf("⚠️  Warning: failed to fetch cherry-pick PRs from comments: %v\n", err)
-		cherryPickPRs = []github.CherryPickPR{} // Continue with empty list
-	}
+	for i := range config.TrackedPRs {
+		if config.TrackedPRs[i].Number != pr.Number {
+			continue
+		}
 
-	addPRForCherryPicking(config, pr, cherryPickPRs, client)
-	fmt.Printf("✓ Added PR #%d for cherry-picking to %v\n\n", pr.Number, pr.CherryPickFor)
-}
+		trackedPR := &config.TrackedPRs[i]
 
-// finalizePRProcessing saves the config and displays completion message
-func finalizePRProcessing(configFile string, config *cmd.Config, saveConfig func(string, *cmd.Config) error) error {
-	if err := updateLastFetchDate(configFile, config, saveConfig); err != nil {
-		return err
-	}
+		// Build set of branches from GitHub labels
+		githubBranches := make(map[string]bool)
+		for _, branch := range pr.CherryPickFor {
+			githubBranches[branch] = true
+		}
 
-	fmt.Printf("Updated %s with new PRs and fetch date.\n", configFile)
-	return nil
-}
+		// Add new branches from GitHub labels
+		for branch := range githubBranches {
+			if _, exists := trackedPR.Branches[branch]; !exists {
+				slog.Info("Adding new branch from label", "pr", pr.Number, "branch", branch)
+				if trackedPR.Branches == nil {
+					trackedPR.Branches = make(map[string]cmd.BranchStatus)
+				}
+				trackedPR.Branches[branch] = cmd.BranchStatus{Status: cmd.BranchStatusPending}
+				updated = true
+			}
+		}
 
-// addPRForCherryPicking adds a PR to be cherry-picked to branches specified by labels
-// If cherry-pick PRs already exist (created by bot), they are added as "picked"
-func addPRForCherryPicking(config *cmd.Config, pr github.PR, cherryPickPRs []github.CherryPickPR, client *github.Client) {
-	branches := make(map[string]cmd.BranchStatus)
-
-	// Create a map of existing cherry-pick PRs by branch
-	existingByBranch := make(map[string]github.CherryPickPR)
-	for _, cp := range cherryPickPRs {
-		existingByBranch[cp.Branch] = cp
-	}
-
-	for _, branch := range pr.CherryPickFor {
-		if cherryPick, exists := existingByBranch[branch]; exists {
-			// Check if this is a failed cherry-pick attempt
-			if cherryPick.Failed {
-				// Bot attempted cherry-pick but failed - mark as failed
-				fmt.Printf("  ❌ Bot cherry-pick failed for %s\n", branch)
-				branches[branch] = cmd.BranchStatus{Status: cmd.BranchStatusFailed}
-			} else {
-				// Cherry-pick PR successfully created - fetch its details
-				fmt.Printf("  🍒 Found existing cherry-pick PR #%d for %s\n", cherryPick.Number, branch)
-
-				// Get PR details including CI status
-				prDetails, err := client.GetPRWithDetails(config.Org, config.Repo, cherryPick.Number)
-				if err != nil {
-					fmt.Printf("  ⚠️  Warning: failed to fetch details for PR #%d: %v\n", cherryPick.Number, err)
-					// Add as picked but with unknown status
-					branches[branch] = cmd.BranchStatus{
-						Status: "picked",
-						PR: &cmd.PickPR{
-							Number:   cherryPick.Number,
-							Title:    fmt.Sprintf("%s (cherry-pick %s)", pr.Title, branch),
-							CIStatus: "unknown",
-						},
-					}
-				} else {
-					// Determine status based on merge state
-					status := cmd.BranchStatusPicked
-					if prDetails.Merged {
-						status = cmd.BranchStatusMerged
-					}
-
-					branches[branch] = cmd.BranchStatus{
-						Status: status,
-						PR: &cmd.PickPR{
-							Number:   prDetails.Number,
-							Title:    prDetails.Title,
-							CIStatus: cmd.ParseCIStatus(prDetails.CIStatus),
-						},
-					}
-					fmt.Printf("  ✓ Status: %s, CI: %s\n", status, prDetails.CIStatus)
+		// Remove branches that no longer have labels on GitHub (unless already picked/merged)
+		for branch, status := range trackedPR.Branches {
+			if !githubBranches[branch] {
+				// Only remove if still pending or failed - keep picked/merged for history
+				if status.Status == cmd.BranchStatusPending || status.Status == cmd.BranchStatusFailed {
+					slog.Info("Removing branch - label removed from GitHub", "pr", pr.Number, "branch", branch)
+					delete(trackedPR.Branches, branch)
+					updated = true
 				}
 			}
-		} else {
-			// No cherry-pick PR exists yet - mark as pending
-			branches[branch] = cmd.BranchStatus{Status: "pending"}
 		}
+
+		break
+	}
+
+	return updated
+}
+
+// addNewPR adds a new PR to the config without checking cherry-pick status
+func addNewPR(config *cmd.Config, pr github.PR) {
+	branches := make(map[string]cmd.BranchStatus)
+	for _, branch := range pr.CherryPickFor {
+		branches[branch] = cmd.BranchStatus{Status: cmd.BranchStatusPending}
 	}
 
 	config.TrackedPRs = append(config.TrackedPRs, cmd.TrackedPR{
@@ -259,39 +345,46 @@ func addPRForCherryPicking(config *cmd.Config, pr github.PR, cherryPickPRs []git
 	})
 }
 
-// updateExistingPickedPRs updates details for existing picked PRs that are not merged
-func updateExistingPickedPRs(config *cmd.Config) error {
-	client, _, err := commands.InitializeGitHubClient()
-	if err != nil {
-		return err
+// determineBranchStatus determines the status for a branch based on cherry-pick PR info
+func determineBranchStatus(cherryPick github.CherryPickPR, config *cmd.Config, client *github.Client, trackedPR *cmd.TrackedPR) cmd.BranchStatus {
+	if cherryPick.Failed {
+		return cmd.BranchStatus{Status: cmd.BranchStatusFailed}
 	}
 
-	for i := range config.TrackedPRs {
-		trackedPR := &config.TrackedPRs[i]
-
-		// Check each branch for picked PRs
-		for branch, status := range trackedPR.Branches {
-			if status.Status == cmd.BranchStatusPicked && status.PR != nil {
-				// Fetch latest details for picked PRs
-				prDetails, err := client.GetPRWithDetails(config.Org, config.Repo, status.PR.Number)
-				if err != nil {
-					fmt.Printf("Warning: Failed to fetch details for pick PR #%d: %v\n", status.PR.Number, err)
-					continue
-				}
-
-				// Update the PR details
-				status.PR.CIStatus = cmd.ParseCIStatus(prDetails.CIStatus)
-				status.PR.Title = prDetails.Title
-
-				// Update status to merged if the PR was merged
-				if prDetails.Merged {
-					status.Status = cmd.BranchStatusMerged
-				}
-
-				trackedPR.Branches[branch] = status
-			}
+	prDetails, err := client.GetPRWithDetails(config.Org, config.Repo, cherryPick.Number)
+	if err != nil {
+		slog.Warn("Failed to fetch PR details", "pr", cherryPick.Number, "error", err)
+		return cmd.BranchStatus{
+			Status: cmd.BranchStatusPicked,
+			PR: &cmd.PickPR{
+				Number:   cherryPick.Number,
+				Title:    fmt.Sprintf("%s (cherry-pick %s)", trackedPR.Title, cherryPick.Branch),
+				CIStatus: "unknown",
+			},
 		}
 	}
 
+	status := cmd.BranchStatusPicked
+	if prDetails.Merged {
+		status = cmd.BranchStatusMerged
+	}
+
+	return cmd.BranchStatus{
+		Status: status,
+		PR: &cmd.PickPR{
+			Number:   prDetails.Number,
+			Title:    prDetails.Title,
+			CIStatus: cmd.ParseCIStatus(prDetails.CIStatus),
+		},
+	}
+}
+
+// updateLastFetchDate updates the last fetch date and saves the config
+func updateLastFetchDate(configFile string, config *cmd.Config, saveConfig func(string, *cmd.Config) error) error {
+	now := time.Now()
+	config.LastFetchDate = &now
+	if err := saveConfig(configFile, config); err != nil {
+		return fmt.Errorf("failed to save configuration: %w", err)
+	}
 	return nil
 }

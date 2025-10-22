@@ -2,6 +2,7 @@ package merge
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/alan/cherry-picker/cmd"
 	"github.com/alan/cherry-picker/internal/commands"
@@ -127,8 +128,7 @@ func (mc *MergeCommand) mergeBranchPR(trackedPR *cmd.TrackedPR, targetBranch str
 
 // mergeBranchOperation is the core operation for merging a single branch
 func (mc *MergeCommand) mergeBranchOperation(client *github.Client, config *cmd.Config, trackedPR *cmd.TrackedPR, branchName string, branchStatus cmd.BranchStatus) error {
-	fmt.Printf("Merging PR #%d (cherry-pick PR #%d) on branch %s...\n",
-		trackedPR.Number, branchStatus.PR.Number, branchName)
+	slog.Info("Merging PR", "original_pr", trackedPR.Number, "cherry_pick_pr", branchStatus.PR.Number, "branch", branchName)
 
 	err := client.MergePR(config.Org, config.Repo, branchStatus.PR.Number, "squash")
 	if err != nil {
@@ -140,8 +140,7 @@ func (mc *MergeCommand) mergeBranchOperation(client *github.Client, config *cmd.
 	branchStatus.Status = cmd.BranchStatusMerged
 	trackedPR.Branches[branchName] = branchStatus
 
-	fmt.Printf("✅ Successfully merged PR #%d branch %s (cherry-pick PR #%d)\n",
-		trackedPR.Number, branchName, branchStatus.PR.Number)
+	slog.Info("Successfully merged PR", "original_pr", trackedPR.Number, "branch", branchName, "cherry_pick_pr", branchStatus.PR.Number)
 
 	return nil
 }

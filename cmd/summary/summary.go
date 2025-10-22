@@ -2,6 +2,7 @@ package summary
 
 import (
 	"fmt"
+	"log/slog"
 	"regexp"
 	"sort"
 	"strconv"
@@ -60,7 +61,7 @@ func runSummary(configFile, targetBranch string, loadConfig func(string) (*cmd.C
 		return err
 	}
 
-	fmt.Printf("🔍 Generating summary for %s/%s branch %s...\n", org, repo, targetBranch)
+	slog.Info("Generating summary", "org", org, "repo", repo, "branch", targetBranch)
 
 	// Get the last release tag for this branch
 	lastTag, err := getLastReleaseTag(client, org, repo, targetBranch)
