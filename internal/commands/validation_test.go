@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/alan/cherry-picker/cmd"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFindAndValidatePR(t *testing.T) {
@@ -37,12 +39,11 @@ func TestFindAndValidatePR(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := FindAndValidatePR(config, tt.prNumber)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("FindAndValidatePR() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !tt.wantErr && result.Number != tt.expected.Number {
-				t.Errorf("FindAndValidatePR() = %v, want %v", result.Number, tt.expected.Number)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expected.Number, result.Number)
 			}
 		})
 	}
@@ -82,8 +83,10 @@ func TestValidateTargetBranch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateTargetBranch(pr, tt.targetBranch)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ValidateTargetBranch() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}
@@ -153,8 +156,10 @@ func TestValidateBranchForOperation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateBranchForOperation(pr, tt.targetBranch, tt.operation, tt.predicate)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ValidateBranchForOperation() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}
@@ -212,8 +217,10 @@ func TestValidateAnyBranchForOperation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateAnyBranchForOperation(tt.pr, tt.operation, tt.predicate)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ValidateAnyBranchForOperation() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}
@@ -277,9 +284,8 @@ func TestIsEligibleForMerge(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := IsEligibleForMerge(tt.status); got != tt.want {
-				t.Errorf("IsEligibleForMerge() = %v, want %v", got, tt.want)
-			}
+			got := IsEligibleForMerge(tt.status)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -331,9 +337,8 @@ func TestIsEligibleForRetry(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := IsEligibleForRetry(tt.status); got != tt.want {
-				t.Errorf("IsEligibleForRetry() = %v, want %v", got, tt.want)
-			}
+			got := IsEligibleForRetry(tt.status)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

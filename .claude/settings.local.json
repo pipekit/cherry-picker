@@ -10,7 +10,12 @@
       "WebSearch",
       "WebSearch",
       "Bash(git stash:*)",
-      "Bash(go test:*)"
+      "Bash(go test:*)",
+      "Bash(while read dir)",
+      "Bash(do echo \"=== $dir ===\")",
+      "Bash(ls:*)",
+      "Bash(done)",
+      "Bash(go mod:*)"
     ],
     "deny": [],
     "ask": []

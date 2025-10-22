@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/alan/cherry-picker/cmd"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParsePRCommandArgs(t *testing.T) {
@@ -47,17 +49,12 @@ func TestParsePRCommandArgs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := ParsePRCommandArgs(tt.args)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ParsePRCommandArgs() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !tt.wantErr {
-				if result.PRNumber != tt.wantPRNumber {
-					t.Errorf("ParsePRCommandArgs() PRNumber = %v, want %v", result.PRNumber, tt.wantPRNumber)
-				}
-				if result.TargetBranch != tt.wantBranch {
-					t.Errorf("ParsePRCommandArgs() TargetBranch = %v, want %v", result.TargetBranch, tt.wantBranch)
-				}
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantPRNumber, result.PRNumber)
+				assert.Equal(t, tt.wantBranch, result.TargetBranch)
 			}
 		})
 	}
@@ -104,12 +101,11 @@ func TestParsePRNumberFromArgs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := ParsePRNumberFromArgs(tt.args, tt.required)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ParsePRNumberFromArgs() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("ParsePRNumberFromArgs() = %v, want %v", got, tt.want)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.want, got)
 			}
 		})
 	}
@@ -140,9 +136,8 @@ func TestGetTargetBranchFromArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := GetTargetBranchFromArgs(tt.args); got != tt.want {
-				t.Errorf("GetTargetBranchFromArgs() = %v, want %v", got, tt.want)
-			}
+			got := GetTargetBranchFromArgs(tt.args)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -180,20 +175,9 @@ func TestDetermineBranchesToUpdate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := DetermineBranchesToUpdate(pr, tt.targetBranch)
-			if len(got) != tt.wantLen {
-				t.Errorf("DetermineBranchesToUpdate() length = %v, want %v", len(got), tt.wantLen)
-			}
+			assert.Len(t, got, tt.wantLen)
 			if tt.wantContains != "" {
-				found := false
-				for _, branch := range got {
-					if branch == tt.wantContains {
-						found = true
-						break
-					}
-				}
-				if !found {
-					t.Errorf("DetermineBranchesToUpdate() does not contain %v", tt.wantContains)
-				}
+				assert.Contains(t, got, tt.wantContains)
 			}
 		})
 	}

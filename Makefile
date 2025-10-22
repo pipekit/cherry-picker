@@ -1,4 +1,4 @@
-.PHONY: test clean fmt vet
+.PHONY: test test-integration test-all clean fmt vet check all
 
 # Find all Go source files
 GO_FILES := $(shell find . -name '*.go' -type f)
@@ -7,9 +7,25 @@ GO_FILES := $(shell find . -name '*.go' -type f)
 cherry-picker: check $(GO_FILES)
 	go build -o cherry-picker .
 
-# Run tests
+# Run unit tests only (excludes integration tests)
 test:
 	go test -v ./...
+
+# Run integration tests only
+test-integration:
+	go test -tags=integration -v ./...
+
+# Run all tests (unit + integration)
+test-all:
+	go test -tags=integration -v ./...
+
+# Run tests with coverage
+test-coverage:
+	go test -cover ./...
+
+# Run all tests with coverage (including integration)
+test-coverage-all:
+	go test -tags=integration -cover ./...
 
 # Clean build artifacts
 clean:
@@ -23,7 +39,7 @@ fmt:
 vet:
 	go vet ./...
 
-# Run all checks
+# Run all checks (unit tests only for speed)
 check: fmt vet test
 
 # Default target

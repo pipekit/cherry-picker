@@ -174,3 +174,4 @@ Tests use standard Go testing with dependency injection:
 - Validation uses shared utilities in `internal/commands/common.go`
 - DCO checks are filtered out when determining CI status
 - The tool expects squash merges for PRs
+- Use testify/assert and testify/require when writing or refactoring tests

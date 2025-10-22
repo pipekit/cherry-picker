@@ -1,19 +1,22 @@
 package fetch
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/alan/cherry-picker/cmd"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
+// TestNewFetchCmd tests command creation and initialization
 func TestNewFetchCmd(t *testing.T) {
-	// Mock functions
 	loadConfig := func(filename string) (*cmd.Config, error) {
-		return nil, nil
+		return &cmd.Config{}, nil
 	}
 	saveConfig := func(filename string, config *cmd.Config) error {
 		return nil
@@ -22,30 +25,70 @@ func TestNewFetchCmd(t *testing.T) {
 	configFile := "test-config.yaml"
 	cmd := NewFetchCmd(&configFile, loadConfig, saveConfig)
 
-	// Test command properties
-	if cmd.Use != "fetch" {
-		t.Errorf("NewFetchCmd() Use = %v, want %v", cmd.Use, "fetch")
-	}
+	assert.NotNil(t, cmd)
+	assert.Equal(t, "fetch", cmd.Use)
+	assert.Equal(t, "Fetch new merged PRs from GitHub that need cherry-picking decisions", cmd.Short)
+	assert.NotEmpty(t, cmd.Long)
+	assert.NotNil(t, cmd.RunE)
 
-	if cmd.Short != "Fetch new merged PRs from GitHub that need cherry-picking decisions" {
-		t.Errorf("NewFetchCmd() Short = %v, want expected short description", cmd.Short)
-	}
+	// Test flags
+	sinceFlag := cmd.Flags().Lookup("since")
+	assert.NotNil(t, sinceFlag, "should have since flag")
 
-	// Test flags (config flag should no longer be present as it's global)
-	flags := cmd.Flags()
-
-	configFlag := flags.Lookup("config")
-	if configFlag != nil {
-		t.Error("NewFetchCmd() should not have local config flag (it's now global)")
-	}
-
-	sinceFlag := flags.Lookup("since")
-	if sinceFlag == nil {
-		t.Error("NewFetchCmd() missing since flag")
-	}
+	// Config flag should not be present as it's global
+	configFlag := cmd.Flags().Lookup("config")
+	assert.Nil(t, configFlag, "should not have local config flag (it's global)")
 }
 
-func TestRunFetch_NoToken(t *testing.T) {
+// TestFetchCmd_RunE_InvalidSinceDate tests error handling for invalid since date
+func TestFetchCmd_RunE_InvalidSinceDate(t *testing.T) {
+	os.Setenv("GITHUB_TOKEN", "test-token")
+	defer os.Unsetenv("GITHUB_TOKEN")
+
+	loadConfig := func(path string) (*cmd.Config, error) {
+		return &cmd.Config{
+			Org:  "test-org",
+			Repo: "test-repo",
+		}, nil
+	}
+	saveConfig := func(path string, config *cmd.Config) error {
+		return nil
+	}
+
+	configFile := "test-config.yaml"
+	cmd := NewFetchCmd(&configFile, loadConfig, saveConfig)
+
+	// Set an invalid since date flag
+	err := cmd.Flags().Set("since", "invalid-date")
+	require.NoError(t, err)
+
+	err = cmd.RunE(cmd, []string{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid date format")
+}
+
+// TestFetchCmd_RunE_ConfigLoadError tests error when config fails to load
+func TestFetchCmd_RunE_ConfigLoadError(t *testing.T) {
+	os.Setenv("GITHUB_TOKEN", "test-token")
+	defer os.Unsetenv("GITHUB_TOKEN")
+
+	loadConfig := func(path string) (*cmd.Config, error) {
+		return nil, errors.New("config load error")
+	}
+	saveConfig := func(path string, config *cmd.Config) error {
+		return nil
+	}
+
+	configFile := "test-config.yaml"
+	cmd := NewFetchCmd(&configFile, loadConfig, saveConfig)
+
+	err := cmd.RunE(cmd, []string{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "config load error")
+}
+
+// TestFetchCommand_Init_NoToken tests initialization without GitHub token
+func TestFetchCommand_Init_NoToken(t *testing.T) {
 	// Temporarily unset GITHUB_TOKEN
 	originalToken := os.Getenv("GITHUB_TOKEN")
 	os.Unsetenv("GITHUB_TOKEN")
@@ -67,7 +110,6 @@ func TestRunFetch_NoToken(t *testing.T) {
 		return nil
 	}
 
-	// Test using the command structure
 	configFile := "test-config.yaml"
 	fetchCmd := &FetchCommand{}
 	fetchCmd.ConfigFile = &configFile
@@ -76,18 +118,12 @@ func TestRunFetch_NoToken(t *testing.T) {
 	fetchCmd.SinceDate = ""
 
 	err := fetchCmd.Init()
-
-	if err == nil {
-		t.Error("FetchCommand.Init() expected error for missing GITHUB_TOKEN, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "GITHUB_TOKEN environment variable is required") {
-		t.Errorf("FetchCommand.Init() error = %v, want error about GITHUB_TOKEN", err)
-	}
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "GITHUB_TOKEN environment variable is required")
 }
 
-func TestRunFetch_InvalidDateFormat(t *testing.T) {
-	// Set a dummy token
+// TestFetchCommand_Run_InvalidDateFormat tests Run with invalid date format
+func TestFetchCommand_Run_InvalidDateFormat(t *testing.T) {
 	os.Setenv("GITHUB_TOKEN", "test-token")
 	defer os.Unsetenv("GITHUB_TOKEN")
 
@@ -103,7 +139,6 @@ func TestRunFetch_InvalidDateFormat(t *testing.T) {
 		return nil
 	}
 
-	// Test using the command structure
 	configFile := "test-config.yaml"
 	fetchCmd := &FetchCommand{}
 	fetchCmd.ConfigFile = &configFile
@@ -111,22 +146,16 @@ func TestRunFetch_InvalidDateFormat(t *testing.T) {
 	fetchCmd.SaveConfig = saveConfig
 	fetchCmd.SinceDate = "invalid-date"
 
-	if err := fetchCmd.Init(); err != nil {
-		t.Fatalf("FetchCommand.Init() unexpected error: %v", err)
-	}
+	err := fetchCmd.Init()
+	require.NoError(t, err)
 
-	err := fetchCmd.Run()
-
-	if err == nil {
-		t.Error("FetchCommand.Run() expected error for invalid date format, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "invalid date format") {
-		t.Errorf("FetchCommand.Run() error = %v, want error about invalid date format", err)
-	}
+	err = fetchCmd.Run()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid date format")
 }
 
-func TestRunFetch_LoadConfigError(t *testing.T) {
+// TestFetchCommand_Init_LoadConfigError tests Init with config load failure
+func TestFetchCommand_Init_LoadConfigError(t *testing.T) {
 	os.Setenv("GITHUB_TOKEN", "test-token")
 	defer os.Unsetenv("GITHUB_TOKEN")
 
@@ -137,7 +166,6 @@ func TestRunFetch_LoadConfigError(t *testing.T) {
 		return nil
 	}
 
-	// Test using the command structure
 	configFile := "test-config.yaml"
 	fetchCmd := &FetchCommand{}
 	fetchCmd.ConfigFile = &configFile
@@ -145,73 +173,99 @@ func TestRunFetch_LoadConfigError(t *testing.T) {
 	fetchCmd.SaveConfig = saveConfig
 
 	err := fetchCmd.Init()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "config load error")
+}
 
-	if err == nil {
-		t.Error("FetchCommand.Init() expected error for config load failure, got nil")
+// TestDetermineSinceDate tests the date determination logic
+func TestDetermineSinceDate(t *testing.T) {
+	tests := []struct {
+		name          string
+		sinceDate     string
+		lastFetchDate *time.Time
+		wantErr       bool
+		checkResult   func(*testing.T, time.Time)
+	}{
+		{
+			name:      "explicit date string",
+			sinceDate: "2024-01-15",
+			wantErr:   false,
+			checkResult: func(t *testing.T, result time.Time) {
+				expected := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
+				assert.Equal(t, expected, result)
+			},
+		},
+		{
+			name:      "invalid date format",
+			sinceDate: "invalid-date",
+			wantErr:   true,
+		},
+		{
+			name:          "use lastFetchDate",
+			sinceDate:     "",
+			lastFetchDate: ptrTime(time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)),
+			wantErr:       false,
+			checkResult: func(t *testing.T, result time.Time) {
+				expected := time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)
+				assert.Equal(t, expected, result)
+			},
+		},
+		{
+			name:      "default to 30 days ago",
+			sinceDate: "",
+			wantErr:   false,
+			checkResult: func(t *testing.T, result time.Time) {
+				now := time.Now()
+				expected := now.AddDate(0, 0, -30)
+				// Check that it's approximately 30 days ago (within 1 minute)
+				assert.WithinDuration(t, expected, result, time.Minute)
+				assert.True(t, result.Before(now))
+			},
+		},
+		{
+			name:          "explicit date overrides lastFetchDate",
+			sinceDate:     "2024-03-01",
+			lastFetchDate: ptrTime(time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)),
+			wantErr:       false,
+			checkResult: func(t *testing.T, result time.Time) {
+				expected := time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC)
+				assert.Equal(t, expected, result)
+			},
+		},
 	}
 
-	if !strings.Contains(err.Error(), "config load error") {
-		t.Errorf("FetchCommand.Init() error = %v, want error about config load failure", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := determineSinceDate(tt.sinceDate, tt.lastFetchDate)
+
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				if tt.checkResult != nil {
+					tt.checkResult(t, result)
+				}
+			}
+		})
 	}
 }
 
-func TestDetermineSinceDate(t *testing.T) {
-	// Test with explicit date string
-	t.Run("Explicit date string", func(t *testing.T) {
-		since, err := determineSinceDate("2024-01-15", nil)
-		if err != nil {
-			t.Fatalf("determineSinceDate() unexpected error: %v", err)
-		}
-		expected := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
-		if !since.Equal(expected) {
-			t.Errorf("determineSinceDate() = %v, want %v", since, expected)
-		}
-	})
+// TestFetchCommandOutput tests command output formatting
+func TestFetchCommandOutput(t *testing.T) {
+	configFile := "test-config.yaml"
+	cmd := NewFetchCmd(&configFile, nil, nil)
 
-	// Test with invalid date format
-	t.Run("Invalid date format", func(t *testing.T) {
-		_, err := determineSinceDate("invalid-date", nil)
-		if err == nil {
-			t.Error("determineSinceDate() expected error for invalid date, got nil")
-		}
-	})
+	// Test help output
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
 
-	// Test with lastFetchDate
-	t.Run("Use lastFetchDate", func(t *testing.T) {
-		lastFetch := time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)
-		since, err := determineSinceDate("", &lastFetch)
-		if err != nil {
-			t.Fatalf("determineSinceDate() unexpected error: %v", err)
-		}
-		if !since.Equal(lastFetch) {
-			t.Errorf("determineSinceDate() = %v, want %v", since, lastFetch)
-		}
-	})
+	err := cmd.Help()
+	assert.NoError(t, err)
+	assert.NotEmpty(t, buf.String(), "should generate help text")
+}
 
-	// Test with no parameters - should default to 30 days ago
-	t.Run("Default to 30 days ago", func(t *testing.T) {
-		now := time.Now()
-		since, err := determineSinceDate("", nil)
-		if err != nil {
-			t.Fatalf("determineSinceDate() unexpected error: %v", err)
-		}
-		expected := now.AddDate(0, 0, -30)
-		// Check that it's approximately 30 days ago (within 1 second)
-		if since.After(now) || since.Before(expected.Add(-1*time.Second)) {
-			t.Errorf("determineSinceDate() = %v, want approximately %v", since, expected)
-		}
-	})
-
-	// Test that explicit date takes precedence over lastFetchDate
-	t.Run("Explicit date overrides lastFetchDate", func(t *testing.T) {
-		lastFetch := time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)
-		since, err := determineSinceDate("2024-03-01", &lastFetch)
-		if err != nil {
-			t.Fatalf("determineSinceDate() unexpected error: %v", err)
-		}
-		expected := time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC)
-		if !since.Equal(expected) {
-			t.Errorf("determineSinceDate() = %v, want %v (should use explicit date)", since, expected)
-		}
-	})
+// ptrTime is a helper to create time.Time pointers
+func ptrTime(t time.Time) *time.Time {
+	return &t
 }
