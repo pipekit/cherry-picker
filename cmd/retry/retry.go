@@ -106,20 +106,14 @@ func (rc *RetryCommand) Run() error {
 
 // retryBranchCI retries CI for a specific branch
 func (rc *RetryCommand) retryBranchCI(trackedPR *cmd.TrackedPR, targetBranch string) error {
-	// Initialize GitHub client
-	client, _, err := commands.InitializeGitHubClient()
-	if err != nil {
-		return err
-	}
-
-	return rc.retryBranchOperation(client, rc.Config, trackedPR, targetBranch, trackedPR.Branches[targetBranch])
+	return rc.retryBranchOperation(rc.GitHubClient, rc.Config, trackedPR, targetBranch, trackedPR.Branches[targetBranch])
 }
 
 // retryBranchOperation is the core operation for retrying CI on a single branch
 func (rc *RetryCommand) retryBranchOperation(client *github.Client, config *cmd.Config, trackedPR *cmd.TrackedPR, branchName string, branchStatus cmd.BranchStatus) error {
 	slog.Info("Retrying failed CI for PR", "original_pr", trackedPR.Number, "cherry_pick_pr", branchStatus.PR.Number, "branch", branchName)
 
-	err := client.RetryFailedWorkflows(config.Org, config.Repo, branchStatus.PR.Number)
+	err := client.RetryFailedWorkflows(branchStatus.PR.Number)
 	if err != nil {
 		return fmt.Errorf("failed to retry CI for PR #%d branch %s (cherry-pick PR #%d): %w",
 			trackedPR.Number, branchName, branchStatus.PR.Number, err)

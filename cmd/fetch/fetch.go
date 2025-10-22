@@ -3,7 +3,6 @@ package fetch
 import (
 	"fmt"
 	"log/slog"
-	"os"
 	"time"
 
 	"github.com/alan/cherry-picker/cmd"
@@ -12,11 +11,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// FetchCommand encapsulates the fetch command with common functionality
+type FetchCommand struct {
+	commands.BaseCommand
+	SinceDate string
+}
+
 // NewFetchCmd creates and returns the fetch command
 func NewFetchCmd(globalConfigFile *string, loadConfig func(string) (*cmd.Config, error), saveConfig func(string, *cmd.Config) error) *cobra.Command {
-	var (
-		sinceDate string
-	)
+	fetchCmd := &FetchCommand{}
 
 	command := &cobra.Command{
 		Use:   "fetch",
@@ -26,42 +29,32 @@ func NewFetchCmd(globalConfigFile *string, loadConfig func(string) (*cmd.Config,
 
 Requires GITHUB_TOKEN environment variable to be set.`,
 		SilenceUsage: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runFetch(*globalConfigFile, sinceDate, loadConfig, saveConfig)
+		RunE: func(cobraCmd *cobra.Command, args []string) error {
+			// Initialize base command
+			fetchCmd.ConfigFile = globalConfigFile
+			fetchCmd.LoadConfig = loadConfig
+			fetchCmd.SaveConfig = saveConfig
+			if err := fetchCmd.Init(); err != nil {
+				return err
+			}
+
+			return fetchCmd.Run()
 		},
 	}
 
-	command.Flags().StringVarP(&sinceDate, "since", "s", "", "Fetch PRs since this date (YYYY-MM-DD), defaults to last fetch date")
+	command.Flags().StringVarP(&fetchCmd.SinceDate, "since", "s", "", "Fetch PRs since this date (YYYY-MM-DD), defaults to last fetch date")
 
 	return command
 }
 
-func runFetch(configFile, sinceDate string, loadConfig func(string) (*cmd.Config, error), saveConfig func(string, *cmd.Config) error) error {
-	config, err := loadConfig(configFile)
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	token, err := getGitHubToken()
+// Run executes the fetch command
+func (fc *FetchCommand) Run() error {
+	since, err := determineSinceDate(fc.SinceDate, fc.Config.LastFetchDate)
 	if err != nil {
 		return err
 	}
 
-	since, err := determineSinceDate(sinceDate, config.LastFetchDate)
-	if err != nil {
-		return err
-	}
-
-	return fetchAndProcessPRs(configFile, config, since, token, saveConfig)
-}
-
-// getGitHubToken retrieves and validates the GitHub token
-func getGitHubToken() (string, error) {
-	token := os.Getenv("GITHUB_TOKEN")
-	if token == "" {
-		return "", fmt.Errorf("GITHUB_TOKEN environment variable is required")
-	}
-	return token, nil
+	return fetchAndProcessPRs(*fc.ConfigFile, fc.Config, since, fc.SaveConfig)
 }
 
 // determineSinceDate determines the date to fetch PRs from
@@ -82,8 +75,8 @@ func determineSinceDate(sinceDate string, lastFetchDate *time.Time) (time.Time, 
 }
 
 // fetchAndProcessPRs handles the main logic of fetching and processing PRs
-func fetchAndProcessPRs(configFile string, config *cmd.Config, since time.Time, token string, saveConfig func(string, *cmd.Config) error) error {
-	client, _, err := commands.InitializeGitHubClient()
+func fetchAndProcessPRs(configFile string, config *cmd.Config, since time.Time, saveConfig func(string, *cmd.Config) error) error {
+	client, _, err := commands.InitializeGitHubClient(config)
 	if err != nil {
 		return err
 	}
@@ -163,12 +156,12 @@ func fetchAndProcessPRs(configFile string, config *cmd.Config, since time.Time, 
 func fetchPRsFromGitHub(config *cmd.Config, since time.Time) ([]github.PR, error) {
 	slog.Info("Fetching merged PRs with cherry-pick labels", "org", config.Org, "repo", config.Repo)
 
-	client, _, err := commands.InitializeGitHubClient()
+	client, _, err := commands.InitializeGitHubClient(config)
 	if err != nil {
 		return nil, err
 	}
 
-	prs, err := client.GetMergedPRs(config.Org, config.Repo, config.SourceBranch, since)
+	prs, err := client.GetMergedPRs(config.SourceBranch, since)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch PRs: %w", err)
 	}
@@ -184,7 +177,7 @@ func updateAllTrackedPRs(config *cmd.Config, client *github.Client) bool {
 		trackedPR := &config.TrackedPRs[i]
 		slog.Info("Checking tracked PR", "pr", trackedPR.Number)
 
-		cherryPickPRs, err := client.GetCherryPickPRsFromComments(config.Org, config.Repo, trackedPR.Number)
+		cherryPickPRs, err := client.GetCherryPickPRsFromComments(trackedPR.Number)
 		if err != nil {
 			slog.Warn("Failed to fetch cherry-pick PRs from comments", "pr", trackedPR.Number, "error", err)
 			cherryPickPRs = []github.CherryPickPR{}
@@ -197,7 +190,7 @@ func updateAllTrackedPRs(config *cmd.Config, client *github.Client) bool {
 		}
 
 		// Search for manual cherry-pick PRs by title
-		manualCherryPicks, err := client.SearchManualCherryPickPRs(config.Org, config.Repo, trackedPR.Number, branches)
+		manualCherryPicks, err := client.SearchManualCherryPickPRs(trackedPR.Number, branches)
 		if err != nil {
 			slog.Warn("Failed to search for manual cherry-pick PRs", "pr", trackedPR.Number, "error", err)
 		} else {
@@ -226,7 +219,7 @@ func updateAllTrackedPRs(config *cmd.Config, client *github.Client) bool {
 					slog.Info("Updated branch status", "pr", trackedPR.Number, "branch", branch,
 						"old_status", currentStatus.Status, "new_status", newStatus.Status)
 				} else if currentStatus.Status == cmd.BranchStatusPicked && currentStatus.PR != nil {
-					prDetails, err := client.GetPRWithDetails(config.Org, config.Repo, currentStatus.PR.Number)
+					prDetails, err := client.GetPRWithDetails(currentStatus.PR.Number)
 					if err == nil {
 						ciChanged := false
 						if currentStatus.PR.CIStatus != cmd.ParseCIStatus(prDetails.CIStatus) {
@@ -351,7 +344,7 @@ func determineBranchStatus(cherryPick github.CherryPickPR, config *cmd.Config, c
 		return cmd.BranchStatus{Status: cmd.BranchStatusFailed}
 	}
 
-	prDetails, err := client.GetPRWithDetails(config.Org, config.Repo, cherryPick.Number)
+	prDetails, err := client.GetPRWithDetails(cherryPick.Number)
 	if err != nil {
 		slog.Warn("Failed to fetch PR details", "pr", cherryPick.Number, "error", err)
 		return cmd.BranchStatus{

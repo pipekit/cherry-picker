@@ -14,9 +14,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// SummaryCommand encapsulates the summary command with common functionality
+type SummaryCommand struct {
+	commands.BaseCommand
+	TargetBranch string
+}
+
 // NewSummaryCmd creates the summary command
 func NewSummaryCmd(globalConfigFile *string, loadConfig func(string) (*cmd.Config, error)) *cobra.Command {
-	summaryCmd := &cobra.Command{
+	summaryCmd := &SummaryCommand{}
+
+	cobraCmd := &cobra.Command{
 		Use:   "summary <target-branch>",
 		Short: "Generate development progress summary for a branch",
 		Long: `Generate a markdown summary of development progress on the target branch since the last release.
@@ -32,39 +40,34 @@ Examples:
 		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			targetBranch := args[0]
-			return runSummary(*globalConfigFile, targetBranch, loadConfig)
+			summaryCmd.TargetBranch = args[0]
+
+			// Initialize base command (no save config needed for summary)
+			summaryCmd.ConfigFile = globalConfigFile
+			summaryCmd.LoadConfig = loadConfig
+			if err := summaryCmd.Init(); err != nil {
+				return err
+			}
+
+			return summaryCmd.Run()
 		},
 	}
 
-	return summaryCmd
+	return cobraCmd
 }
 
-// runSummary executes the summary command logic
-func runSummary(configFile, targetBranch string, loadConfig func(string) (*cmd.Config, error)) error {
-	// Load configuration to get org and repo
-	config, err := loadConfig(configFile)
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	org := config.Org
-	repo := config.Repo
+// Run executes the summary command
+func (sc *SummaryCommand) Run() error {
+	org := sc.Config.Org
+	repo := sc.Config.Repo
 
 	// Create mapping from cherry-pick PR numbers to original PR numbers
-	cherryPickMap := createCherryPickMap(config, targetBranch)
+	cherryPickMap := createCherryPickMap(sc.Config, sc.TargetBranch)
 
-	// Get GitHub token
-	// Initialize GitHub client
-	client, _, err := commands.InitializeGitHubClient()
-	if err != nil {
-		return err
-	}
-
-	slog.Info("Generating summary", "org", org, "repo", repo, "branch", targetBranch)
+	slog.Info("Generating summary", "org", org, "repo", repo, "branch", sc.TargetBranch)
 
 	// Get the last release tag for this branch
-	lastTag, err := getLastReleaseTag(client, org, repo, targetBranch)
+	lastTag, err := getLastReleaseTag(sc.GitHubClient, sc.TargetBranch)
 	if err != nil {
 		return fmt.Errorf("failed to get last release tag: %w", err)
 	}
@@ -76,30 +79,30 @@ func runSummary(configFile, targetBranch string, loadConfig func(string) (*cmd.C
 	}
 
 	// Get commits since the last tag
-	commits, err := getCommitsSinceTag(client, org, repo, targetBranch, lastTag)
+	commits, err := getCommitsSinceTag(sc.GitHubClient, sc.TargetBranch, lastTag)
 	if err != nil {
 		return fmt.Errorf("failed to get commits: %w", err)
 	}
 
 	// Get picked PRs that might not be in commits yet
-	pickedPRs := getPickedPRs(config, targetBranch)
+	pickedPRs := getPickedPRs(sc.Config, sc.TargetBranch)
 
 	// Get open PRs targeting this branch
-	openPRs, err := client.GetOpenPRs(org, repo, targetBranch)
+	openPRs, err := sc.GitHubClient.GetOpenPRs(sc.TargetBranch)
 	if err != nil {
 		return fmt.Errorf("failed to get open PRs: %w", err)
 	}
 
 	// Generate markdown output
-	generateMarkdownSummary(nextVersion, lastTag, targetBranch, commits, cherryPickMap, pickedPRs, openPRs)
+	generateMarkdownSummary(nextVersion, lastTag, sc.TargetBranch, commits, cherryPickMap, pickedPRs, openPRs)
 
 	return nil
 }
 
 // getLastReleaseTag finds the most recent release tag for the given branch
-func getLastReleaseTag(client *github.Client, org, repo, branch string) (string, error) {
+func getLastReleaseTag(client *github.Client, branch string) (string, error) {
 	// Get all tags from the repository
-	tags, err := client.ListTags(org, repo)
+	tags, err := client.ListTags()
 	if err != nil {
 		return "", fmt.Errorf("failed to list tags: %w", err)
 	}
@@ -171,8 +174,8 @@ func incrementPatchVersion(version string) (string, error) {
 }
 
 // getCommitsSinceTag gets commits on the branch since the given tag
-func getCommitsSinceTag(client *github.Client, org, repo, branch, sinceTag string) ([]github.Commit, error) {
-	return client.GetCommitsSince(org, repo, branch, sinceTag)
+func getCommitsSinceTag(client *github.Client, branch, sinceTag string) ([]github.Commit, error) {
+	return client.GetCommitsSince(branch, sinceTag)
 }
 
 // generateMarkdownSummary outputs the markdown summary

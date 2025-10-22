@@ -107,30 +107,20 @@ func (mc *MergeCommand) Run() error {
 
 // mergeBranchPR merges a specific branch's PR
 func (mc *MergeCommand) mergeBranchPR(trackedPR *cmd.TrackedPR, targetBranch string) error {
-	// Initialize GitHub client
-	client, _, err := commands.InitializeGitHubClient()
-	if err != nil {
-		return err
-	}
-
-	err = mc.mergeBranchOperation(client, mc.Config, trackedPR, targetBranch, trackedPR.Branches[targetBranch])
+	err := mc.mergeBranchOperation(mc.GitHubClient, mc.Config, trackedPR, targetBranch, trackedPR.Branches[targetBranch])
 	if err != nil {
 		return err
 	}
 
 	// Save the updated configuration
-	if err := mc.SaveConfig(*mc.ConfigFile, mc.Config); err != nil {
-		return fmt.Errorf("failed to save config: %w", err)
-	}
-
-	return nil
+	return mc.SaveConfig(*mc.ConfigFile, mc.Config)
 }
 
 // mergeBranchOperation is the core operation for merging a single branch
 func (mc *MergeCommand) mergeBranchOperation(client *github.Client, config *cmd.Config, trackedPR *cmd.TrackedPR, branchName string, branchStatus cmd.BranchStatus) error {
 	slog.Info("Merging PR", "original_pr", trackedPR.Number, "cherry_pick_pr", branchStatus.PR.Number, "branch", branchName)
 
-	err := client.MergePR(config.Org, config.Repo, branchStatus.PR.Number, "squash")
+	err := client.MergePR(branchStatus.PR.Number, "squash")
 	if err != nil {
 		return fmt.Errorf("failed to merge PR #%d branch %s (cherry-pick PR #%d): %w",
 			trackedPR.Number, branchName, branchStatus.PR.Number, err)

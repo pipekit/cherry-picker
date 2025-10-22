@@ -11,10 +11,35 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// Client wraps the GitHub API client
+// Client wraps the GitHub API client with repository context
 type Client struct {
 	client *github.Client
 	ctx    context.Context
+	org    string
+	repo   string
+}
+
+// paginatedList handles paginated list operations
+// fetchPage should return the items for the current page and the response with pagination info
+func paginatedList[T any](fetchPage func(page int) ([]T, *github.Response, error)) ([]T, error) {
+	var allItems []T
+	page := 0
+
+	for {
+		items, resp, err := fetchPage(page)
+		if err != nil {
+			return nil, err
+		}
+
+		allItems = append(allItems, items...)
+
+		if resp.NextPage == 0 {
+			break
+		}
+		page = resp.NextPage
+	}
+
+	return allItems, nil
 }
 
 // PR represents a pull request from GitHub
@@ -49,9 +74,19 @@ func NewClient(ctx context.Context, token string) *Client {
 	}
 }
 
+// WithRepository returns a new client with org/repo context set
+func (c *Client) WithRepository(org, repo string) *Client {
+	return &Client{
+		client: c.client,
+		ctx:    c.ctx,
+		org:    org,
+		repo:   repo,
+	}
+}
+
 // GetMergedPRs fetches all merged PRs to the specified branch with cherry-pick labels
-func (c *Client) GetMergedPRs(org, repo, branch string, since time.Time) ([]PR, error) {
-	labels, err := c.ListLabels(org, repo)
+func (c *Client) GetMergedPRs(branch string, since time.Time) ([]PR, error) {
+	labels, err := c.ListLabels()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list labels: %w", err)
 	}
@@ -61,7 +96,7 @@ func (c *Client) GetMergedPRs(org, repo, branch string, since time.Time) ([]PR, 
 		return []PR{}, nil
 	}
 
-	query := buildSearchQuery(org, repo, branch, cherryPickLabels)
+	query := buildSearchQuery(c.org, c.repo, branch, cherryPickLabels)
 	return c.searchPRs(query)
 }
 
@@ -183,48 +218,43 @@ func extractRepoFromIssue(issue *github.Issue) string {
 }
 
 // GetOpenPRs fetches open PRs targeting the specified branch
-func (c *Client) GetOpenPRs(org, repo, branch string) ([]PR, error) {
-	opts := &github.PullRequestListOptions{
-		State:     "open",
-		Base:      branch,
-		Sort:      "updated",
-		Direction: "desc",
-		ListOptions: github.ListOptions{
-			PerPage: 100,
-		},
+func (c *Client) GetOpenPRs(branch string) ([]PR, error) {
+	prs, err := paginatedList(func(page int) ([]*github.PullRequest, *github.Response, error) {
+		opts := &github.PullRequestListOptions{
+			State:     "open",
+			Base:      branch,
+			Sort:      "updated",
+			Direction: "desc",
+			ListOptions: github.ListOptions{
+				PerPage: 100,
+				Page:    page,
+			},
+		}
+		return c.client.PullRequests.List(c.ctx, c.org, c.repo, opts)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch open pull requests: %w", err)
 	}
 
+	// Convert to our PR type
 	var allPRs []PR
-
-	for {
-		prs, resp, err := c.client.PullRequests.List(c.ctx, org, repo, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetch open pull requests: %w", err)
-		}
-
-		for _, pr := range prs {
-			allPRs = append(allPRs, PR{
-				Number:   pr.GetNumber(),
-				Title:    pr.GetTitle(),
-				URL:      pr.GetHTMLURL(),
-				SHA:      pr.GetHead().GetSHA(), // Use head SHA for open PRs
-				Merged:   false,                 // Open PRs are not merged
-				CIStatus: "unknown",             // CI status not fetched for listing
-			})
-		}
-
-		if resp.NextPage == 0 {
-			break
-		}
-		opts.Page = resp.NextPage
+	for _, pr := range prs {
+		allPRs = append(allPRs, PR{
+			Number:   pr.GetNumber(),
+			Title:    pr.GetTitle(),
+			URL:      pr.GetHTMLURL(),
+			SHA:      pr.GetHead().GetSHA(), // Use head SHA for open PRs
+			Merged:   false,                 // Open PRs are not merged
+			CIStatus: "unknown",             // CI status not fetched for listing
+		})
 	}
 
 	return allPRs, nil
 }
 
 // GetPR fetches details for a specific PR by number
-func (c *Client) GetPR(org, repo string, number int) (*PR, error) {
-	pr, _, err := c.client.PullRequests.Get(c.ctx, org, repo, number)
+func (c *Client) GetPR(number int) (*PR, error) {
+	pr, _, err := c.client.PullRequests.Get(c.ctx, c.org, c.repo, number)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch PR #%d: %w", number, err)
 	}
@@ -240,14 +270,14 @@ func (c *Client) GetPR(org, repo string, number int) (*PR, error) {
 }
 
 // GetPRWithDetails fetches detailed information for a specific PR including CI status
-func (c *Client) GetPRWithDetails(org, repo string, number int) (*PR, error) {
-	pr, _, err := c.client.PullRequests.Get(c.ctx, org, repo, number)
+func (c *Client) GetPRWithDetails(number int) (*PR, error) {
+	pr, _, err := c.client.PullRequests.Get(c.ctx, c.org, c.repo, number)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch PR #%d: %w", number, err)
 	}
 
 	// Check CI status by getting commit status
-	ciStatus, err := c.getPRCIStatus(org, repo, pr.GetHead().GetSHA())
+	ciStatus, err := c.getPRCIStatus(pr.GetHead().GetSHA())
 	if err != nil {
 		// Don't fail the whole request if we can't get CI status
 		ciStatus = "unknown"
@@ -263,43 +293,82 @@ func (c *Client) GetPRWithDetails(org, repo string, number int) (*PR, error) {
 	}, nil
 }
 
-// getPRCIStatus checks the CI status of a commit by examining both combined status and check runs
-func (c *Client) getPRCIStatus(org, repo, sha string) (string, error) {
+// getPRCIStatus checks the CI status of a commit using the CIStatusChecker
+func (c *Client) getPRCIStatus(sha string) (string, error) {
+	checker := c.newCIStatusChecker()
+	return checker.GetStatus(sha)
+}
+
+// CIStatusChecker handles checking CI status for commits, filtering out DCO checks
+type CIStatusChecker struct {
+	client      *Client
+	dcoPatterns []string
+}
+
+// newCIStatusChecker creates a new CI status checker with default DCO patterns
+func (c *Client) newCIStatusChecker() *CIStatusChecker {
+	return &CIStatusChecker{
+		client: c,
+		dcoPatterns: []string{
+			"dco",
+			"DCO",
+			"developer-certificate-of-origin",
+			"signoff",
+			"sign-off",
+			"signed-off-by",
+		},
+	}
+}
+
+// isDCOCheck determines if a check name matches DCO patterns
+func (checker *CIStatusChecker) isDCOCheck(checkName string) bool {
+	lowerName := strings.ToLower(checkName)
+	for _, pattern := range checker.dcoPatterns {
+		if strings.Contains(lowerName, strings.ToLower(pattern)) {
+			return true
+		}
+	}
+	return false
+}
+
+// GetStatus returns the overall CI status for a commit SHA
+func (checker *CIStatusChecker) GetStatus(sha string) (string, error) {
 	// Get both combined status and check runs for more accurate status
-	combinedStatus, checkRunsStatus, err := c.getDetailedCIStatus(org, repo, sha)
+	combinedStatus, checkRunsStatus, err := checker.getDetailedStatus(sha)
 	if err != nil {
 		return "unknown", fmt.Errorf("failed to fetch CI status for commit %s: %w", sha, err)
 	}
 
-	// If either combined status or check runs indicate pending, report as pending
-	if combinedStatus == "pending" || checkRunsStatus == "pending" {
-		return "pending", nil
-	}
-
-	// If either indicates failure, report as failing
-	if combinedStatus == "failing" || checkRunsStatus == "failing" {
-		return "failing", nil
-	}
-
-	// If both are passing, report as passing
-	if combinedStatus == "passing" && checkRunsStatus == "passing" {
-		return "passing", nil
-	}
-
-	// Default to the combined status if we can't determine from check runs
-	return combinedStatus, nil
+	return checker.aggregateStatus(combinedStatus, checkRunsStatus), nil
 }
 
-// getDetailedCIStatus gets both combined status and check runs status
-func (c *Client) getDetailedCIStatus(org, repo, sha string) (string, string, error) {
-	// Get combined status (traditional status checks)
-	combinedStatus, err := c.getCombinedStatus(org, repo, sha)
+// aggregateStatus combines combined status and check runs status with priority rules
+func (checker *CIStatusChecker) aggregateStatus(combinedStatus, checkRunsStatus string) string {
+	// Priority: pending > failing > passing
+	if combinedStatus == "pending" || checkRunsStatus == "pending" {
+		return "pending"
+	}
+
+	if combinedStatus == "failing" || checkRunsStatus == "failing" {
+		return "failing"
+	}
+
+	if combinedStatus == "passing" && checkRunsStatus == "passing" {
+		return "passing"
+	}
+
+	// Default to combined status if inconclusive
+	return combinedStatus
+}
+
+// getDetailedStatus fetches both traditional status checks and modern check runs
+func (checker *CIStatusChecker) getDetailedStatus(sha string) (string, string, error) {
+	combinedStatus, err := checker.getCombinedStatus(sha)
 	if err != nil {
 		return "unknown", "unknown", err
 	}
 
-	// Get check runs status (GitHub Actions and other apps)
-	checkRunsStatus, err := c.getCheckRunsStatus(org, repo, sha)
+	checkRunsStatus, err := checker.getCheckRunsStatus(sha)
 	if err != nil {
 		// If check runs fail, just use combined status
 		return combinedStatus, "unknown", nil
@@ -308,32 +377,35 @@ func (c *Client) getDetailedCIStatus(org, repo, sha string) (string, string, err
 	return combinedStatus, checkRunsStatus, nil
 }
 
-// getCombinedStatus gets the traditional combined status, ignoring DCO checks
-func (c *Client) getCombinedStatus(org, repo, sha string) (string, error) {
-	status, _, err := c.client.Repositories.GetCombinedStatus(c.ctx, org, repo, sha, nil)
+// getCombinedStatus gets traditional commit status, filtering DCO checks
+func (checker *CIStatusChecker) getCombinedStatus(sha string) (string, error) {
+	status, _, err := checker.client.client.Repositories.GetCombinedStatus(checker.client.ctx, checker.client.org, checker.client.repo, sha, nil)
 	if err != nil {
 		return "unknown", err
 	}
 
 	// Filter out DCO-related statuses
-	var nonDCOStatuses []*github.RepoStatus
+	var relevantStatuses []*github.RepoStatus
 	for _, s := range status.Statuses {
-		if !isDCOCheck(s.GetContext()) {
-			nonDCOStatuses = append(nonDCOStatuses, s)
+		if !checker.isDCOCheck(s.GetContext()) {
+			relevantStatuses = append(relevantStatuses, s)
 		}
 	}
 
-	// If no non-DCO statuses, return unknown
-	if len(nonDCOStatuses) == 0 {
+	if len(relevantStatuses) == 0 {
 		return "unknown", nil
 	}
 
-	// Determine overall status from non-DCO statuses
+	return checker.evaluateStatuses(relevantStatuses), nil
+}
+
+// evaluateStatuses determines overall status from a list of status checks
+func (checker *CIStatusChecker) evaluateStatuses(statuses []*github.RepoStatus) string {
 	hasFailure := false
 	hasPending := false
 	hasSuccess := false
 
-	for _, s := range nonDCOStatuses {
+	for _, s := range statuses {
 		switch s.GetState() {
 		case "success":
 			hasSuccess = true
@@ -346,21 +418,21 @@ func (c *Client) getCombinedStatus(org, repo, sha string) (string, error) {
 
 	// Priority: pending > failure > success
 	if hasPending {
-		return "pending", nil
+		return "pending"
 	}
 	if hasFailure {
-		return "failing", nil
+		return "failing"
 	}
 	if hasSuccess {
-		return "passing", nil
+		return "passing"
 	}
 
-	return "unknown", nil
+	return "unknown"
 }
 
-// getCheckRunsStatus gets the status from GitHub Actions and other check runs
-func (c *Client) getCheckRunsStatus(org, repo, sha string) (string, error) {
-	checkRuns, _, err := c.client.Checks.ListCheckRunsForRef(c.ctx, org, repo, sha, nil)
+// getCheckRunsStatus gets status from GitHub Actions and modern check runs
+func (checker *CIStatusChecker) getCheckRunsStatus(sha string) (string, error) {
+	checkRuns, _, err := checker.client.client.Checks.ListCheckRunsForRef(checker.client.ctx, checker.client.org, checker.client.repo, sha, nil)
 	if err != nil {
 		return "unknown", err
 	}
@@ -374,8 +446,8 @@ func (c *Client) getCheckRunsStatus(org, repo, sha string) (string, error) {
 	hasCompleted := false
 
 	for _, run := range checkRuns.CheckRuns {
-		// Skip DCO checks - ignore their status
-		if isDCOCheck(run.GetName()) {
+		// Skip DCO checks
+		if checker.isDCOCheck(run.GetName()) {
 			continue
 		}
 
@@ -390,43 +462,18 @@ func (c *Client) getCheckRunsStatus(org, repo, sha string) (string, error) {
 		}
 	}
 
-	// If any checks are still running, report as pending
+	// Priority: running > failed > completed
 	if hasRunning {
 		return "pending", nil
 	}
-
-	// If any completed checks failed, report as failing
 	if hasFailed {
 		return "failing", nil
 	}
-
-	// If we have completed checks and none failed, report as passing
 	if hasCompleted {
 		return "passing", nil
 	}
 
 	return "unknown", nil
-}
-
-// isDCOCheck determines if a check run is a DCO (Developer Certificate of Origin) check
-func isDCOCheck(checkName string) bool {
-	// Common DCO check names - add more patterns as needed
-	dcoPatterns := []string{
-		"dco",
-		"DCO",
-		"developer-certificate-of-origin",
-		"signoff",
-		"sign-off",
-		"signed-off-by",
-	}
-
-	for _, pattern := range dcoPatterns {
-		if strings.Contains(strings.ToLower(checkName), strings.ToLower(pattern)) {
-			return true
-		}
-	}
-
-	return false
 }
 
 // CherryPickPR represents a cherry-pick PR created by a bot
@@ -441,8 +488,8 @@ type CherryPickPR struct {
 // Looks for patterns like:
 //   - Success: "🍒 Cherry-pick PR created for 3.7: #14944"
 //   - Failure: "Cherry-pick failed for 3.7" or similar failure messages
-func (c *Client) GetCherryPickPRsFromComments(org, repo string, prNumber int) ([]CherryPickPR, error) {
-	comments, _, err := c.client.Issues.ListComments(c.ctx, org, repo, prNumber, nil)
+func (c *Client) GetCherryPickPRsFromComments(prNumber int) ([]CherryPickPR, error) {
+	comments, _, err := c.client.Issues.ListComments(c.ctx, c.org, c.repo, prNumber, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch comments for PR #%d: %w", prNumber, err)
 	}
@@ -496,11 +543,11 @@ func (c *Client) GetCherryPickPRsFromComments(org, repo string, prNumber int) ([
 
 // SearchManualCherryPickPRs searches for manually created cherry-pick PRs by title pattern
 // Looks for PRs with titles like "cherry-pick: ... (#14894)" targeting release branches
-func (c *Client) SearchManualCherryPickPRs(org, repo string, prNumber int, branches []string) ([]CherryPickPR, error) {
+func (c *Client) SearchManualCherryPickPRs(prNumber int, branches []string) ([]CherryPickPR, error) {
 	var cherryPickPRs []CherryPickPR
 
 	// Search for PRs containing "cherry-pick" and the PR number in title
-	query := fmt.Sprintf("repo:%s/%s is:pr cherry-pick %d in:title", org, repo, prNumber)
+	query := fmt.Sprintf("repo:%s/%s is:pr cherry-pick %d in:title", c.org, c.repo, prNumber)
 
 	opts := &github.SearchOptions{
 		ListOptions: github.ListOptions{
@@ -532,7 +579,7 @@ func (c *Client) SearchManualCherryPickPRs(org, repo string, prNumber int, branc
 		}
 
 		// Get the full PR to determine target branch
-		pr, _, err := c.client.PullRequests.Get(c.ctx, org, repo, issue.GetNumber())
+		pr, _, err := c.client.PullRequests.Get(c.ctx, c.org, c.repo, issue.GetNumber())
 		if err != nil {
 			continue
 		}
@@ -556,7 +603,7 @@ func (c *Client) SearchManualCherryPickPRs(org, repo string, prNumber int, branc
 }
 
 // CreatePR creates a new pull request
-func (c *Client) CreatePR(org, repo, title, body, head, base string) (int, error) {
+func (c *Client) CreatePR(title, body, head, base string) (int, error) {
 	newPR := &github.NewPullRequest{
 		Title: &title,
 		Body:  &body,
@@ -564,7 +611,7 @@ func (c *Client) CreatePR(org, repo, title, body, head, base string) (int, error
 		Base:  &base,
 	}
 
-	pr, _, err := c.client.PullRequests.Create(c.ctx, org, repo, newPR)
+	pr, _, err := c.client.PullRequests.Create(c.ctx, c.org, c.repo, newPR)
 	if err != nil {
 		return 0, err
 	}
@@ -573,9 +620,9 @@ func (c *Client) CreatePR(org, repo, title, body, head, base string) (int, error
 }
 
 // RetryFailedWorkflows retries all failed workflow runs for a PR
-func (c *Client) RetryFailedWorkflows(org, repo string, prNumber int) error {
+func (c *Client) RetryFailedWorkflows(prNumber int) error {
 	// Get the PR to find its head SHA
-	pr, _, err := c.client.PullRequests.Get(c.ctx, org, repo, prNumber)
+	pr, _, err := c.client.PullRequests.Get(c.ctx, c.org, c.repo, prNumber)
 	if err != nil {
 		return fmt.Errorf("failed to get PR #%d: %w", prNumber, err)
 	}
@@ -583,7 +630,7 @@ func (c *Client) RetryFailedWorkflows(org, repo string, prNumber int) error {
 	headSHA := pr.GetHead().GetSHA()
 
 	// Get workflow runs for the PR's head commit
-	workflowRuns, err := c.getWorkflowRunsForCommit(org, repo, headSHA)
+	workflowRuns, err := c.getWorkflowRunsForCommit(headSHA)
 	if err != nil {
 		return fmt.Errorf("failed to get workflow runs for commit %s: %w", headSHA, err)
 	}
@@ -602,7 +649,7 @@ func (c *Client) RetryFailedWorkflows(org, repo string, prNumber int) error {
 			continue
 		}
 
-		err := c.retryWorkflowRun(org, repo, run.GetID())
+		err := c.retryWorkflowRun(run.GetID())
 		if err != nil {
 			errors = append(errors, fmt.Errorf("failed to retry workflow run %d: %w", run.GetID(), err))
 			continue
@@ -626,7 +673,7 @@ func (c *Client) RetryFailedWorkflows(org, repo string, prNumber int) error {
 }
 
 // getWorkflowRunsForCommit gets all workflow runs for a specific commit
-func (c *Client) getWorkflowRunsForCommit(org, repo, sha string) ([]*github.WorkflowRun, error) {
+func (c *Client) getWorkflowRunsForCommit(sha string) ([]*github.WorkflowRun, error) {
 	// List workflow runs for the repository, filtered by head_sha
 	opts := &github.ListWorkflowRunsOptions{
 		HeadSHA: sha,
@@ -635,7 +682,7 @@ func (c *Client) getWorkflowRunsForCommit(org, repo, sha string) ([]*github.Work
 		},
 	}
 
-	runs, _, err := c.client.Actions.ListRepositoryWorkflowRuns(c.ctx, org, repo, opts)
+	runs, _, err := c.client.Actions.ListRepositoryWorkflowRuns(c.ctx, c.org, c.repo, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -644,12 +691,12 @@ func (c *Client) getWorkflowRunsForCommit(org, repo, sha string) ([]*github.Work
 }
 
 // retryWorkflowRun retries a specific workflow run by re-running failed jobs
-func (c *Client) retryWorkflowRun(org, repo string, runID int64) error {
+func (c *Client) retryWorkflowRun(runID int64) error {
 	// Try to re-run failed jobs first (more targeted approach)
-	_, err := c.client.Actions.RerunFailedJobsByID(c.ctx, org, repo, runID)
+	_, err := c.client.Actions.RerunFailedJobsByID(c.ctx, c.org, c.repo, runID)
 	if err != nil {
 		// If re-running failed jobs doesn't work, try re-running the entire workflow
-		_, retryErr := c.client.Actions.RerunWorkflowByID(c.ctx, org, repo, runID)
+		_, retryErr := c.client.Actions.RerunWorkflowByID(c.ctx, c.org, c.repo, runID)
 		if retryErr != nil {
 			return fmt.Errorf("failed to retry workflow run (tried both failed jobs and full rerun): %w (original: %v)", retryErr, err)
 		}
@@ -659,9 +706,9 @@ func (c *Client) retryWorkflowRun(org, repo string, runID int64) error {
 }
 
 // MergePR merges a pull request using the specified merge method
-func (c *Client) MergePR(org, repo string, prNumber int, mergeMethod string) error {
+func (c *Client) MergePR(prNumber int, mergeMethod string) error {
 	// Get the PR to find its head SHA for merge validation
-	pr, _, err := c.client.PullRequests.Get(c.ctx, org, repo, prNumber)
+	pr, _, err := c.client.PullRequests.Get(c.ctx, c.org, c.repo, prNumber)
 	if err != nil {
 		return fmt.Errorf("failed to get PR #%d: %w", prNumber, err)
 	}
@@ -679,7 +726,7 @@ func (c *Client) MergePR(org, repo string, prNumber int, mergeMethod string) err
 	}
 
 	// Perform the merge
-	mergeResult, _, err := c.client.PullRequests.Merge(c.ctx, org, repo, prNumber, "", mergeOptions)
+	mergeResult, _, err := c.client.PullRequests.Merge(c.ctx, c.org, c.repo, prNumber, "", mergeOptions)
 	if err != nil {
 		return fmt.Errorf("failed to merge PR #%d: %w", prNumber, err)
 	}
@@ -692,59 +739,45 @@ func (c *Client) MergePR(org, repo string, prNumber int, mergeMethod string) err
 }
 
 // ListTags gets all tags from the repository
-func (c *Client) ListTags(org, repo string) ([]string, error) {
-	opts := &github.ListOptions{
-		PerPage: 100,
+func (c *Client) ListTags() ([]string, error) {
+	tags, err := paginatedList(func(page int) ([]*github.RepositoryTag, *github.Response, error) {
+		opts := &github.ListOptions{
+			PerPage: 100,
+			Page:    page,
+		}
+		return c.client.Repositories.ListTags(c.ctx, c.org, c.repo, opts)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list tags: %w", err)
 	}
 
-	var allTags []string
-
-	for {
-		tags, resp, err := c.client.Repositories.ListTags(c.ctx, org, repo, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list tags: %w", err)
-		}
-
-		for _, tag := range tags {
-			allTags = append(allTags, tag.GetName())
-		}
-
-		if resp.NextPage == 0 {
-			break
-		}
-		opts.Page = resp.NextPage
+	// Convert to string slice
+	var tagNames []string
+	for _, tag := range tags {
+		tagNames = append(tagNames, tag.GetName())
 	}
 
-	return allTags, nil
+	return tagNames, nil
 }
 
 // ListLabels fetches all labels from the repository
-func (c *Client) ListLabels(org, repo string) ([]*github.Label, error) {
-	opts := &github.ListOptions{
-		PerPage: 100,
+func (c *Client) ListLabels() ([]*github.Label, error) {
+	labels, err := paginatedList(func(page int) ([]*github.Label, *github.Response, error) {
+		opts := &github.ListOptions{
+			PerPage: 100,
+			Page:    page,
+		}
+		return c.client.Issues.ListLabels(c.ctx, c.org, c.repo, opts)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list labels: %w", err)
 	}
 
-	var allLabels []*github.Label
-
-	for {
-		labels, resp, err := c.client.Issues.ListLabels(c.ctx, org, repo, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list labels: %w", err)
-		}
-
-		allLabels = append(allLabels, labels...)
-
-		if resp.NextPage == 0 {
-			break
-		}
-		opts.Page = resp.NextPage
-	}
-
-	return allLabels, nil
+	return labels, nil
 }
 
 // GetCommitsSince gets commits on a branch since a specific tag/commit (equivalent to git log tag..branch)
-func (c *Client) GetCommitsSince(org, repo, branch, sinceTag string) ([]Commit, error) {
+func (c *Client) GetCommitsSince(branch, sinceTag string) ([]Commit, error) {
 	var base string
 
 	if sinceTag == "v0.0.0" {
@@ -763,38 +796,34 @@ func (c *Client) GetCommitsSince(org, repo, branch, sinceTag string) ([]Commit, 
 
 	if base == "" {
 		// For initial version, get all commits on the branch
-		opts := &github.CommitsListOptions{
-			SHA: branch,
-			ListOptions: github.ListOptions{
-				PerPage: 100,
-			},
+		commits, err := paginatedList(func(page int) ([]*github.RepositoryCommit, *github.Response, error) {
+			opts := &github.CommitsListOptions{
+				SHA: branch,
+				ListOptions: github.ListOptions{
+					PerPage: 100,
+					Page:    page,
+				},
+			}
+			return c.client.Repositories.ListCommits(c.ctx, c.org, c.repo, opts)
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to list commits: %w", err)
 		}
 
+		// Convert to our Commit type
 		var allCommits []Commit
-		for {
-			commits, resp, err := c.client.Repositories.ListCommits(c.ctx, org, repo, opts)
-			if err != nil {
-				return nil, fmt.Errorf("failed to list commits: %w", err)
-			}
-
-			for _, commit := range commits {
-				allCommits = append(allCommits, Commit{
-					SHA:     commit.GetSHA(),
-					Message: strings.Split(commit.GetCommit().GetMessage(), "\n")[0], // First line only
-					Author:  commit.GetCommit().GetAuthor().GetName(),
-					Date:    commit.GetCommit().GetAuthor().GetDate().Time,
-				})
-			}
-
-			if resp.NextPage == 0 {
-				break
-			}
-			opts.Page = resp.NextPage
+		for _, commit := range commits {
+			allCommits = append(allCommits, Commit{
+				SHA:     commit.GetSHA(),
+				Message: strings.Split(commit.GetCommit().GetMessage(), "\n")[0], // First line only
+				Author:  commit.GetCommit().GetAuthor().GetName(),
+				Date:    commit.GetCommit().GetAuthor().GetDate().Time,
+			})
 		}
 		return allCommits, nil
 	} else {
 		// Use Compare API for tag..branch comparison
-		comparison, _, err = c.client.Repositories.CompareCommits(c.ctx, org, repo, base, branch, &github.ListOptions{
+		comparison, _, err = c.client.Repositories.CompareCommits(c.ctx, c.org, c.repo, base, branch, &github.ListOptions{
 			PerPage: 100,
 		})
 		if err != nil {

@@ -67,14 +67,22 @@ func TestRunFetch_NoToken(t *testing.T) {
 		return nil
 	}
 
-	err := runFetch("test-config.yaml", "", loadConfig, saveConfig)
+	// Test using the command structure
+	configFile := "test-config.yaml"
+	fetchCmd := &FetchCommand{}
+	fetchCmd.ConfigFile = &configFile
+	fetchCmd.LoadConfig = loadConfig
+	fetchCmd.SaveConfig = saveConfig
+	fetchCmd.SinceDate = ""
+
+	err := fetchCmd.Init()
 
 	if err == nil {
-		t.Error("runFetch() expected error for missing GITHUB_TOKEN, got nil")
+		t.Error("FetchCommand.Init() expected error for missing GITHUB_TOKEN, got nil")
 	}
 
 	if !strings.Contains(err.Error(), "GITHUB_TOKEN environment variable is required") {
-		t.Errorf("runFetch() error = %v, want error about GITHUB_TOKEN", err)
+		t.Errorf("FetchCommand.Init() error = %v, want error about GITHUB_TOKEN", err)
 	}
 }
 
@@ -95,14 +103,26 @@ func TestRunFetch_InvalidDateFormat(t *testing.T) {
 		return nil
 	}
 
-	err := runFetch("test-config.yaml", "invalid-date", loadConfig, saveConfig)
+	// Test using the command structure
+	configFile := "test-config.yaml"
+	fetchCmd := &FetchCommand{}
+	fetchCmd.ConfigFile = &configFile
+	fetchCmd.LoadConfig = loadConfig
+	fetchCmd.SaveConfig = saveConfig
+	fetchCmd.SinceDate = "invalid-date"
+
+	if err := fetchCmd.Init(); err != nil {
+		t.Fatalf("FetchCommand.Init() unexpected error: %v", err)
+	}
+
+	err := fetchCmd.Run()
 
 	if err == nil {
-		t.Error("runFetch() expected error for invalid date format, got nil")
+		t.Error("FetchCommand.Run() expected error for invalid date format, got nil")
 	}
 
 	if !strings.Contains(err.Error(), "invalid date format") {
-		t.Errorf("runFetch() error = %v, want error about invalid date format", err)
+		t.Errorf("FetchCommand.Run() error = %v, want error about invalid date format", err)
 	}
 }
 
@@ -117,14 +137,21 @@ func TestRunFetch_LoadConfigError(t *testing.T) {
 		return nil
 	}
 
-	err := runFetch("test-config.yaml", "", loadConfig, saveConfig)
+	// Test using the command structure
+	configFile := "test-config.yaml"
+	fetchCmd := &FetchCommand{}
+	fetchCmd.ConfigFile = &configFile
+	fetchCmd.LoadConfig = loadConfig
+	fetchCmd.SaveConfig = saveConfig
+
+	err := fetchCmd.Init()
 
 	if err == nil {
-		t.Error("runFetch() expected error for config load failure, got nil")
+		t.Error("FetchCommand.Init() expected error for config load failure, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "failed to load config") {
-		t.Errorf("runFetch() error = %v, want error about config load failure", err)
+	if !strings.Contains(err.Error(), "config load error") {
+		t.Errorf("FetchCommand.Init() error = %v, want error about config load failure", err)
 	}
 }
 

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"strings"
 
 	"github.com/alan/cherry-picker/cmd"
 	"github.com/spf13/cobra"
@@ -110,6 +109,43 @@ func getSortedBranchNames(branches map[string]cmd.BranchStatus) []string {
 	return branchNames
 }
 
+// ciStatusInfo holds display information for a CI status
+type ciStatusInfo struct {
+	indicator        string
+	suggestedCommand string
+}
+
+// getCIStatusInfo returns display information for a given CI status
+func getCIStatusInfo(ciStatus cmd.CIStatus, executablePath, configFlag string, prNumber int, branch string) ciStatusInfo {
+	switch ciStatus {
+	case "passing":
+		return ciStatusInfo{
+			indicator:        "✅ CI passing",
+			suggestedCommand: fmt.Sprintf("%s%s merge %d %s", executablePath, configFlag, prNumber, branch),
+		}
+	case "failing":
+		return ciStatusInfo{
+			indicator:        "❌ CI failing",
+			suggestedCommand: fmt.Sprintf("%s%s retry %d %s", executablePath, configFlag, prNumber, branch),
+		}
+	case "pending":
+		return ciStatusInfo{
+			indicator:        "🔄 CI pending",
+			suggestedCommand: "", // No action needed while CI is running
+		}
+	case "unknown":
+		return ciStatusInfo{
+			indicator:        "❓ CI unknown",
+			suggestedCommand: "",
+		}
+	default:
+		return ciStatusInfo{
+			indicator:        "❓ CI " + string(ciStatus),
+			suggestedCommand: "",
+		}
+	}
+}
+
 // displayBranchStatus displays the status for a single branch
 func displayBranchStatus(branch string, status cmd.BranchStatus, config *cmd.Config, prNumber int, configFile string) {
 	executablePath := os.Args[0]
@@ -129,35 +165,16 @@ func displayBranchStatus(branch string, status cmd.BranchStatus, config *cmd.Con
 
 			// Show stored PR details underneath
 			fmt.Printf("  %-15s  %s", "", status.PR.Title)
-			var indicators []string
-			// Show contextual command based on CI status
-			var suggestedCommand string
-			switch status.PR.CIStatus {
-			case "passing":
-				indicators = append(indicators, "✅ CI passing")
-				// Ready to merge
-				suggestedCommand = fmt.Sprintf("%s%s merge %d %s", executablePath, configFlag, prNumber, branch)
-			case "failing":
-				indicators = append(indicators, "❌ CI failing")
-				// Suggest retry
-				suggestedCommand = fmt.Sprintf("%s%s retry %d %s", executablePath, configFlag, prNumber, branch)
-			case "pending":
-				indicators = append(indicators, "🔄 CI pending")
-				// No action needed while CI is running
-			case "unknown":
-				indicators = append(indicators, "❓ CI unknown")
-			default:
-				indicators = append(indicators, "❓ CI "+string(status.PR.CIStatus))
-			}
 
-			if len(indicators) > 0 {
-				fmt.Printf(" [%s]", strings.Join(indicators, ", "))
-			}
+			// Get CI status display info
+			ciInfo := getCIStatusInfo(status.PR.CIStatus, executablePath, configFlag, prNumber, branch)
+
+			fmt.Printf(" [%s]", ciInfo.indicator)
 			fmt.Println()
 
 			// Show suggested command if available
-			if suggestedCommand != "" {
-				fmt.Printf("  %-15s  💡 %s\n", "", suggestedCommand)
+			if ciInfo.suggestedCommand != "" {
+				fmt.Printf("  %-15s  💡 %s\n", "", ciInfo.suggestedCommand)
 			}
 		} else {
 			fmt.Printf("  %-15s: ✅ picked\n", branch)

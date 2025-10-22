@@ -110,7 +110,7 @@ func (pc *PickCommand) runPick() error {
 
 		// Update and save immediately after each successful cherry-pick
 		pc.updateSingleBranchStatus(pr, branch, result)
-		if err := pc.SaveConfigWithErrorHandling(pc.Config); err != nil {
+		if err := pc.SaveConfig(*pc.ConfigFile, pc.Config); err != nil {
 			slog.Warn("Failed to save config after successful cherry-pick", "branch", branch, "error", err)
 		} else {
 			slog.Info("Saved progress for branch", "branch", branch)
@@ -118,7 +118,7 @@ func (pc *PickCommand) runPick() error {
 	}
 
 	// Final save and display
-	if err := pc.SaveConfigWithErrorHandling(pc.Config); err != nil {
+	if err := pc.SaveConfig(*pc.ConfigFile, pc.Config); err != nil {
 		return err
 	}
 
@@ -146,7 +146,7 @@ func (pc *PickCommand) runPickForTest() error {
 	pc.updatePRStatus(pr, branches)
 
 	// Save config
-	if err := pc.SaveConfigWithErrorHandling(pc.Config); err != nil {
+	if err := pc.SaveConfig(*pc.ConfigFile, pc.Config); err != nil {
 		return err
 	}
 
@@ -207,7 +207,7 @@ func (pc *PickCommand) performGitFetch() error {
 
 // getCommitSHA retrieves the merge commit SHA for a PR
 func (pc *PickCommand) getCommitSHA(prNumber int) (string, error) {
-	pr, err := pc.GitHubClient.GetPR(pc.Config.Org, pc.Config.Repo, prNumber)
+	pr, err := pc.GitHubClient.GetPR(prNumber)
 	if err != nil {
 		return "", fmt.Errorf("failed to get PR details: %w", err)
 	}
@@ -323,7 +323,7 @@ func (pc *PickCommand) createCherryPickPR(headBranch, baseBranch string, origina
 	// Body format matches bot: "Cherry-picked <original-title> (#<pr>)"
 	prDescription := fmt.Sprintf("Cherry-picked %s (#%d)", originalTitle, originalPRNumber)
 
-	prNumber, err := pc.GitHubClient.CreatePR(pc.Config.Org, pc.Config.Repo, prTitle, prDescription, headBranch, baseBranch)
+	prNumber, err := pc.GitHubClient.CreatePR(prTitle, prDescription, headBranch, baseBranch)
 	if err != nil {
 		return 0, fmt.Errorf("GitHub API error creating PR from %s to %s: %w", headBranch, baseBranch, err)
 	}

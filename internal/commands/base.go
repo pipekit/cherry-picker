@@ -2,8 +2,6 @@ package commands
 
 import (
 	"context"
-	"fmt"
-	"os"
 
 	"github.com/alan/cherry-picker/cmd"
 	"github.com/alan/cherry-picker/internal/github"
@@ -28,30 +26,13 @@ func (bc *BaseCommand) Init() error {
 	}
 	bc.Config = config
 
-	// Initialize GitHub client with token from environment
-	token, err := getGitHubToken()
+	// Initialize GitHub client using common initialization function
+	client, ctx, err := InitializeGitHubClient(config)
 	if err != nil {
 		return err
 	}
-	bc.Context = context.Background()
-	bc.GitHubClient = github.NewClient(bc.Context, token)
+	bc.GitHubClient = client
+	bc.Context = ctx
 
-	return nil
-}
-
-// getGitHubToken retrieves and validates the GitHub token
-func getGitHubToken() (string, error) {
-	token := os.Getenv("GITHUB_TOKEN")
-	if token == "" {
-		return "", fmt.Errorf("GITHUB_TOKEN environment variable is required")
-	}
-	return token, nil
-}
-
-// SaveConfigWithErrorHandling saves the config with standardized error handling
-func (bc *BaseCommand) SaveConfigWithErrorHandling(config *cmd.Config) error {
-	if err := bc.SaveConfig(*bc.ConfigFile, config); err != nil {
-		return err
-	}
 	return nil
 }
