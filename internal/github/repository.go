@@ -114,3 +114,53 @@ func (c *Client) GetCommitsSince(ctx context.Context, branch, sinceTag string) (
 
 	return commits, nil
 }
+
+// ListReleases gets all releases from the repository, sorted by creation date (newest first)
+func (c *Client) ListReleases(ctx context.Context) ([]Release, error) {
+	releases, err := paginatedList(func(page int) ([]*github.RepositoryRelease, *github.Response, error) {
+		opts := &github.ListOptions{
+			PerPage: 100,
+			Page:    page,
+		}
+		return c.client.Repositories.ListReleases(ctx, c.org, c.repo, opts)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list releases: %w", err)
+	}
+
+	// Convert to our Release type
+	var result []Release
+	for _, release := range releases {
+		result = append(result, Release{
+			TagName:     release.GetTagName(),
+			Name:        release.GetName(),
+			CreatedAt:   release.GetCreatedAt().Time,
+			PublishedAt: release.GetPublishedAt().Time,
+		})
+	}
+
+	return result, nil
+}
+
+// GetCommitsBetweenTags gets all commits between two tags
+func (c *Client) GetCommitsBetweenTags(ctx context.Context, oldTag, newTag string) ([]Commit, error) {
+	comparison, _, err := c.client.Repositories.CompareCommits(ctx, c.org, c.repo, oldTag, newTag, &github.ListOptions{
+		PerPage: 250, // Get more commits per page for releases
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to compare %s..%s: %w", oldTag, newTag, err)
+	}
+
+	// Convert GitHub commits to our Commit struct, including full message
+	var commits []Commit
+	for _, commit := range comparison.Commits {
+		commits = append(commits, Commit{
+			SHA:     commit.GetSHA(),
+			Message: commit.GetCommit().GetMessage(), // Full message to parse cherry-pick info
+			Author:  commit.GetCommit().GetAuthor().GetName(),
+			Date:    commit.GetCommit().GetAuthor().GetDate().Time,
+		})
+	}
+
+	return commits, nil
+}

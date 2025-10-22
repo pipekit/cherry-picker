@@ -78,6 +78,12 @@ func fetchAndProcessPRs(ctx context.Context, configFile string, config *cmd.Conf
 		if updateAllTrackedPRs(ctx, config, client) {
 			configUpdated = true
 		}
+
+		// Check releases and mark cherry-picks as released
+		slog.Info("Checking releases for merged cherry-picks")
+		if updateReleasedStatus(ctx, config, client) {
+			configUpdated = true
+		}
 	}
 
 	if configUpdated || newPRsAdded > 0 {
@@ -141,8 +147,8 @@ func updateAllTrackedPRs(ctx context.Context, config *cmd.Config, client *github
 		}
 
 		for branch, currentStatus := range trackedPR.Branches {
-			if currentStatus.Status == cmd.BranchStatusMerged {
-				slog.Info("Skipping merged tracked PR", "pr", trackedPR.Number, "branch", branch)
+			if currentStatus.Status == cmd.BranchStatusMerged || currentStatus.Status == cmd.BranchStatusReleased {
+				slog.Debug("Skipping finalized tracked PR", "pr", trackedPR.Number, "branch", branch, "status", currentStatus.Status)
 				continue
 			}
 			slog.Info("Checking tracked PR", "pr", trackedPR.Number, "branch", branch)

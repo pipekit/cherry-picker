@@ -182,6 +182,8 @@ func displayBranchStatus(branch string, status cmd.BranchStatus, config *cmd.Con
 		}
 	case cmd.BranchStatusMerged:
 		fmt.Printf("  %-15s: ✅ merged\n", branch)
+	case cmd.BranchStatusReleased:
+		fmt.Printf("  %-15s: 🎉 released\n", branch)
 	default:
 		fmt.Printf("  %-15s: ❓ unknown status: %s\n", branch, status.Status)
 	}
@@ -193,6 +195,7 @@ func displayStatusSummary(prs []cmd.TrackedPR) {
 	totalFailed := 0
 	totalPicked := 0
 	totalMerged := 0
+	totalReleased := 0
 	for _, pr := range prs {
 		for _, status := range pr.Branches {
 			switch status.Status {
@@ -204,13 +207,15 @@ func displayStatusSummary(prs []cmd.TrackedPR) {
 				totalPicked++
 			case cmd.BranchStatusMerged:
 				totalMerged++
+			case cmd.BranchStatusReleased:
+				totalReleased++
 			}
 		}
 	}
 
-	totalCompleted := totalPicked + totalMerged
-	fmt.Printf("Summary: %d PR(s), %d pending, %d failed, %d completed (%d picked, %d merged)\n",
-		len(prs), totalPending, totalFailed, totalCompleted, totalPicked, totalMerged)
+	totalCompleted := totalPicked + totalMerged + totalReleased
+	fmt.Printf("Summary: %d PR(s), %d pending, %d failed, %d completed (%d picked, %d merged, %d released)\n",
+		len(prs), totalPending, totalFailed, totalCompleted, totalPicked, totalMerged, totalReleased)
 }
 
 // getConfigFlag returns the config flag if not using default

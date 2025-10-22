@@ -17,7 +17,8 @@
       "Bash(done)",
       "Bash(go mod:*)",
       "Bash(go get:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "WebFetch(domain:pkg.go.dev)"
     ],
     "deny": [],
     "ask": []

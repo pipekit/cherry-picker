@@ -43,6 +43,8 @@ const (
 	BranchStatusPicked BranchStatusType = "picked"
 	// BranchStatusMerged indicates cherry-pick PR has been merged
 	BranchStatusMerged BranchStatusType = "merged"
+	// BranchStatusReleased indicates cherry-pick PR has been included in a release
+	BranchStatusReleased BranchStatusType = "released"
 )
 
 // ParseBranchStatus converts a string to BranchStatusType
@@ -56,6 +58,8 @@ func ParseBranchStatus(s string) BranchStatusType {
 		return BranchStatusPicked
 	case "merged":
 		return BranchStatusMerged
+	case "released":
+		return BranchStatusReleased
 	default:
 		return BranchStatusPending // Default to pending for unknown values
 	}
@@ -63,12 +67,13 @@ func ParseBranchStatus(s string) BranchStatusType {
 
 // Config represents the structure of cherry-picks.yaml
 type Config struct {
-	Org                string      `yaml:"org"`
-	Repo               string      `yaml:"repo"`
-	SourceBranch       string      `yaml:"source_branch"`
-	AIAssistantCommand string      `yaml:"ai_assistant_command"`
-	LastFetchDate      *time.Time  `yaml:"last_fetch_date,omitempty"`
-	TrackedPRs         []TrackedPR `yaml:"tracked_prs,omitempty"`
+	Org                string            `yaml:"org"`
+	Repo               string            `yaml:"repo"`
+	SourceBranch       string            `yaml:"source_branch"`
+	AIAssistantCommand string            `yaml:"ai_assistant_command"`
+	LastFetchDate      *time.Time        `yaml:"last_fetch_date,omitempty"`
+	LastCheckedRelease map[string]string `yaml:"last_checked_release,omitempty"` // branch -> last checked release tag
+	TrackedPRs         []TrackedPR       `yaml:"tracked_prs,omitempty"`
 }
 
 // TrackedPR represents a PR that we're tracking for cherry-picking

@@ -58,6 +58,8 @@ func generateMarkdownSummary(version, lastTag, _ string, commits []github.Commit
 				fmt.Printf("- [ ] #%d cherry-picked as #%d\n", pickedPR.OriginalPR, pickedPR.CherryPickPR)
 			case cmd.BranchStatusMerged:
 				fmt.Printf("- [x] #%d cherry-picked as #%d\n", pickedPR.OriginalPR, pickedPR.CherryPickPR)
+			case cmd.BranchStatusReleased:
+				fmt.Printf("- [x] #%d cherry-picked as #%d (released)\n", pickedPR.OriginalPR, pickedPR.CherryPickPR)
 			case cmd.BranchStatusPending, cmd.BranchStatusFailed:
 				// These statuses shouldn't appear in picked PRs, but handle them for exhaustiveness
 			}

@@ -28,3 +28,11 @@ type CherryPickPR struct {
 	OriginalPR int
 	Failed     bool // True if cherry-pick attempt failed
 }
+
+// Release represents a GitHub release
+type Release struct {
+	TagName     string
+	Name        string
+	CreatedAt   time.Time
+	PublishedAt time.Time
+}
