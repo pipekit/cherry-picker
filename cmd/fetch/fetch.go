@@ -1,6 +1,8 @@
+// Package fetch implements the fetch command for discovering and tracking PRs with cherry-pick labels.
 package fetch
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -9,15 +11,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// FetchCommand encapsulates the fetch command with common functionality
-type FetchCommand struct {
+// command encapsulates the fetch command with common functionality
+type command struct {
 	commands.BaseCommand
 	SinceDate string
 }
 
 // NewFetchCmd creates and returns the fetch command
 func NewFetchCmd(globalConfigFile *string, loadConfig func(string) (*cmd.Config, error), saveConfig func(string, *cmd.Config) error) *cobra.Command {
-	fetchCmd := &FetchCommand{}
+	fetchCmd := &command{}
 
 	command := &cobra.Command{
 		Use:   "fetch",
@@ -27,16 +29,16 @@ func NewFetchCmd(globalConfigFile *string, loadConfig func(string) (*cmd.Config,
 
 Requires GITHUB_TOKEN environment variable to be set.`,
 		SilenceUsage: true,
-		RunE: func(cobraCmd *cobra.Command, args []string) error {
+		RunE: func(cobraCmd *cobra.Command, _ []string) error {
 			// Initialize base command
 			fetchCmd.ConfigFile = globalConfigFile
 			fetchCmd.LoadConfig = loadConfig
 			fetchCmd.SaveConfig = saveConfig
-			if err := fetchCmd.Init(); err != nil {
+			if err := fetchCmd.Init(cobraCmd.Context()); err != nil {
 				return err
 			}
 
-			return fetchCmd.Run()
+			return fetchCmd.Run(cobraCmd.Context())
 		},
 	}
 
@@ -46,13 +48,13 @@ Requires GITHUB_TOKEN environment variable to be set.`,
 }
 
 // Run executes the fetch command
-func (fc *FetchCommand) Run() error {
+func (fc *command) Run(ctx context.Context) error {
 	since, err := determineSinceDate(fc.SinceDate, fc.Config.LastFetchDate)
 	if err != nil {
 		return err
 	}
 
-	return fetchAndProcessPRs(*fc.ConfigFile, fc.Config, since, fc.SaveConfig)
+	return fetchAndProcessPRs(ctx, *fc.ConfigFile, fc.Config, since, fc.SaveConfig)
 }
 
 // determineSinceDate determines the date to fetch PRs from

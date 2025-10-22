@@ -1,6 +1,7 @@
 package github
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -9,8 +10,8 @@ import (
 )
 
 // GetMergedPRs fetches all merged PRs to the specified branch with cherry-pick labels
-func (c *Client) GetMergedPRs(branch string, since time.Time) ([]PR, error) {
-	labels, err := c.ListLabels()
+func (c *Client) GetMergedPRs(ctx context.Context, branch string, _since time.Time) ([]PR, error) {
+	labels, err := c.ListLabels(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list labels: %w", err)
 	}
@@ -21,7 +22,7 @@ func (c *Client) GetMergedPRs(branch string, since time.Time) ([]PR, error) {
 	}
 
 	query := buildSearchQuery(c.org, c.repo, branch, cherryPickLabels)
-	return c.searchPRs(query)
+	return c.searchPRs(ctx, query)
 }
 
 // filterCherryPickLabels filters labels to only those starting with "cherry-pick"
@@ -51,7 +52,7 @@ func buildSearchQuery(org, repo, branch string, labels []string) string {
 }
 
 // searchPRs executes a search query and returns matching PRs
-func (c *Client) searchPRs(query string) ([]PR, error) {
+func (c *Client) searchPRs(ctx context.Context, query string) ([]PR, error) {
 	opts := &github.SearchOptions{
 		Sort:  "updated",
 		Order: "desc",
@@ -63,7 +64,7 @@ func (c *Client) searchPRs(query string) ([]PR, error) {
 	var allPRs []PR
 
 	for {
-		result, resp, err := c.client.Search.Issues(c.ctx, query, opts)
+		result, resp, err := c.client.Search.Issues(ctx, query, opts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to search PRs: %w", err)
 		}
@@ -81,7 +82,7 @@ func (c *Client) searchPRs(query string) ([]PR, error) {
 			var sha string
 			if issue.PullRequestLinks != nil && issue.PullRequestLinks.URL != nil {
 				prNum := issue.GetNumber()
-				pr, _, err := c.client.PullRequests.Get(c.ctx, extractOrgFromIssue(issue), extractRepoFromIssue(issue), prNum)
+				pr, _, err := c.client.PullRequests.Get(ctx, extractOrgFromIssue(issue), extractRepoFromIssue(issue), prNum)
 				if err == nil && pr.MergeCommitSHA != nil {
 					sha = pr.GetMergeCommitSHA()
 				}
@@ -113,8 +114,8 @@ func extractCherryPickBranchesFromLabels(labels []*github.Label) []string {
 	var branches []string
 	for _, label := range labels {
 		labelName := label.GetName()
-		if strings.HasPrefix(labelName, "cherry-pick/") {
-			version := strings.TrimPrefix(labelName, "cherry-pick/")
+		if after, ok := strings.CutPrefix(labelName, "cherry-pick/"); ok {
+			version := after
 			branch := "release-" + version
 			branches = append(branches, branch)
 		}
@@ -142,7 +143,7 @@ func extractRepoFromIssue(issue *github.Issue) string {
 }
 
 // GetOpenPRs fetches open PRs targeting the specified branch
-func (c *Client) GetOpenPRs(branch string) ([]PR, error) {
+func (c *Client) GetOpenPRs(ctx context.Context, branch string) ([]PR, error) {
 	prs, err := paginatedList(func(page int) ([]*github.PullRequest, *github.Response, error) {
 		opts := &github.PullRequestListOptions{
 			State:     "open",
@@ -154,7 +155,7 @@ func (c *Client) GetOpenPRs(branch string) ([]PR, error) {
 				Page:    page,
 			},
 		}
-		return c.client.PullRequests.List(c.ctx, c.org, c.repo, opts)
+		return c.client.PullRequests.List(ctx, c.org, c.repo, opts)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch open pull requests: %w", err)
@@ -177,8 +178,8 @@ func (c *Client) GetOpenPRs(branch string) ([]PR, error) {
 }
 
 // GetPR fetches details for a specific PR by number
-func (c *Client) GetPR(number int) (*PR, error) {
-	pr, _, err := c.client.PullRequests.Get(c.ctx, c.org, c.repo, number)
+func (c *Client) GetPR(ctx context.Context, number int) (*PR, error) {
+	pr, _, err := c.client.PullRequests.Get(ctx, c.org, c.repo, number)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch PR #%d: %w", number, err)
 	}
@@ -194,14 +195,14 @@ func (c *Client) GetPR(number int) (*PR, error) {
 }
 
 // GetPRWithDetails fetches detailed information for a specific PR including CI status
-func (c *Client) GetPRWithDetails(number int) (*PR, error) {
-	pr, _, err := c.client.PullRequests.Get(c.ctx, c.org, c.repo, number)
+func (c *Client) GetPRWithDetails(ctx context.Context, number int) (*PR, error) {
+	pr, _, err := c.client.PullRequests.Get(ctx, c.org, c.repo, number)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch PR #%d: %w", number, err)
 	}
 
 	// Check CI status by getting commit status
-	ciStatus, err := c.getPRCIStatus(pr.GetHead().GetSHA())
+	ciStatus, err := c.getPRCIStatus(ctx, pr.GetHead().GetSHA())
 	if err != nil {
 		// Don't fail the whole request if we can't get CI status
 		ciStatus = "unknown"
@@ -218,13 +219,13 @@ func (c *Client) GetPRWithDetails(number int) (*PR, error) {
 }
 
 // getPRCIStatus checks the CI status of a commit using the CIStatusChecker
-func (c *Client) getPRCIStatus(sha string) (string, error) {
+func (c *Client) getPRCIStatus(ctx context.Context, sha string) (string, error) {
 	checker := c.newCIStatusChecker()
-	return checker.GetStatus(sha)
+	return checker.GetStatus(ctx, sha)
 }
 
 // CreatePR creates a new pull request
-func (c *Client) CreatePR(title, body, head, base string) (int, error) {
+func (c *Client) CreatePR(ctx context.Context, title, body, head, base string) (int, error) {
 	newPR := &github.NewPullRequest{
 		Title: &title,
 		Body:  &body,
@@ -232,7 +233,7 @@ func (c *Client) CreatePR(title, body, head, base string) (int, error) {
 		Base:  &base,
 	}
 
-	pr, _, err := c.client.PullRequests.Create(c.ctx, c.org, c.repo, newPR)
+	pr, _, err := c.client.PullRequests.Create(ctx, c.org, c.repo, newPR)
 	if err != nil {
 		return 0, err
 	}

@@ -5,11 +5,8 @@ import (
 	"strings"
 )
 
-// MessageFormatter handles success message formatting
-type MessageFormatter struct{}
-
-// FormatSuccessMessage creates a standardized success message
-func (mf *MessageFormatter) FormatSuccessMessage(action string, prNumber int, targetBranch string, branches []string) string {
+// formatSuccessMessage creates a standardized success message
+func formatSuccessMessage(action string, prNumber int, targetBranch string, branches []string) string {
 	var msg strings.Builder
 
 	if targetBranch != "" {
@@ -24,8 +21,7 @@ func (mf *MessageFormatter) FormatSuccessMessage(action string, prNumber int, ta
 
 // DisplaySuccessMessage displays a formatted success message
 func DisplaySuccessMessage(action string, prNumber int, targetBranch string, branches []string) {
-	mf := &MessageFormatter{}
-	fmt.Print(mf.FormatSuccessMessage(action, prNumber, targetBranch, branches))
+	fmt.Print(formatSuccessMessage(action, prNumber, targetBranch, branches))
 }
 
 // DisplayBulkOperationSuccess displays success messages for bulk operations (merge/retry all)

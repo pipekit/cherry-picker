@@ -1,3 +1,4 @@
+// Package cmd defines core data structures for cherry-picker configuration and PR tracking.
 package cmd
 
 import "time"
@@ -6,9 +7,13 @@ import "time"
 type CIStatus string
 
 const (
+	// CIStatusPassing indicates all CI checks have passed
 	CIStatusPassing CIStatus = "passing"
+	// CIStatusFailing indicates one or more CI checks have failed
 	CIStatusFailing CIStatus = "failing"
+	// CIStatusPending indicates CI checks are still running
 	CIStatusPending CIStatus = "pending"
+	// CIStatusUnknown indicates CI status could not be determined
 	CIStatusUnknown CIStatus = "unknown"
 )
 
@@ -26,14 +31,18 @@ func ParseCIStatus(s string) CIStatus {
 	}
 }
 
-// BranchStatus represents the status of a PR for a specific target branch
+// BranchStatusType represents the status of a PR for a specific target branch
 type BranchStatusType string
 
 const (
+	// BranchStatusPending indicates bot hasn't attempted cherry-pick yet
 	BranchStatusPending BranchStatusType = "pending"
-	BranchStatusFailed  BranchStatusType = "failed"
-	BranchStatusPicked  BranchStatusType = "picked"
-	BranchStatusMerged  BranchStatusType = "merged"
+	// BranchStatusFailed indicates bot attempted but failed (usually conflicts)
+	BranchStatusFailed BranchStatusType = "failed"
+	// BranchStatusPicked indicates bot or manual pick successfully created cherry-pick PR
+	BranchStatusPicked BranchStatusType = "picked"
+	// BranchStatusMerged indicates cherry-pick PR has been merged
+	BranchStatusMerged BranchStatusType = "merged"
 )
 
 // ParseBranchStatus converts a string to BranchStatusType

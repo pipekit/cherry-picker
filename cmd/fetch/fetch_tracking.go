@@ -1,6 +1,7 @@
 package fetch
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"time"
@@ -11,13 +12,13 @@ import (
 )
 
 // fetchAndProcessPRs handles the main logic of fetching and processing PRs
-func fetchAndProcessPRs(configFile string, config *cmd.Config, since time.Time, saveConfig func(string, *cmd.Config) error) error {
-	client, _, err := commands.InitializeGitHubClient(config)
+func fetchAndProcessPRs(ctx context.Context, configFile string, config *cmd.Config, since time.Time, saveConfig func(string, *cmd.Config) error) error {
+	client, _, err := commands.InitializeGitHubClient(ctx, config)
 	if err != nil {
 		return err
 	}
 
-	allPRs, err := fetchPRsFromGitHub(config, since)
+	allPRs, err := fetchPRsFromGitHub(ctx, config, since)
 	if err != nil {
 		return err
 	}
@@ -74,7 +75,7 @@ func fetchAndProcessPRs(configFile string, config *cmd.Config, since time.Time, 
 	}
 	if len(config.TrackedPRs) > 0 {
 		slog.Info("Updating tracked PRs", "count", len(config.TrackedPRs))
-		if updateAllTrackedPRs(config, client) {
+		if updateAllTrackedPRs(ctx, config, client) {
 			configUpdated = true
 		}
 	}
@@ -89,15 +90,15 @@ func fetchAndProcessPRs(configFile string, config *cmd.Config, since time.Time, 
 }
 
 // fetchPRsFromGitHub fetches PRs from GitHub API
-func fetchPRsFromGitHub(config *cmd.Config, since time.Time) ([]github.PR, error) {
+func fetchPRsFromGitHub(ctx context.Context, config *cmd.Config, since time.Time) ([]github.PR, error) {
 	slog.Info("Fetching merged PRs with cherry-pick labels", "org", config.Org, "repo", config.Repo)
 
-	client, _, err := commands.InitializeGitHubClient(config)
+	client, _, err := commands.InitializeGitHubClient(ctx, config)
 	if err != nil {
 		return nil, err
 	}
 
-	prs, err := client.GetMergedPRs(config.SourceBranch, since)
+	prs, err := client.GetMergedPRs(ctx, config.SourceBranch, since)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch PRs: %w", err)
 	}
@@ -106,14 +107,14 @@ func fetchPRsFromGitHub(config *cmd.Config, since time.Time) ([]github.PR, error
 }
 
 // updateAllTrackedPRs updates all existing tracked PRs by checking their cherry-pick status
-func updateAllTrackedPRs(config *cmd.Config, client *github.Client) bool {
+func updateAllTrackedPRs(ctx context.Context, config *cmd.Config, client *github.Client) bool {
 	updated := false
 
 	for i := range config.TrackedPRs {
 		trackedPR := &config.TrackedPRs[i]
 		slog.Info("Checking tracked PR", "pr", trackedPR.Number)
 
-		cherryPickPRs, err := client.GetCherryPickPRsFromComments(trackedPR.Number)
+		cherryPickPRs, err := client.GetCherryPickPRsFromComments(ctx, trackedPR.Number)
 		if err != nil {
 			slog.Warn("Failed to fetch cherry-pick PRs from comments", "pr", trackedPR.Number, "error", err)
 			cherryPickPRs = []github.CherryPickPR{}
@@ -126,7 +127,7 @@ func updateAllTrackedPRs(config *cmd.Config, client *github.Client) bool {
 		}
 
 		// Search for manual cherry-pick PRs by title
-		manualCherryPicks, err := client.SearchManualCherryPickPRs(trackedPR.Number, branches)
+		manualCherryPicks, err := client.SearchManualCherryPickPRs(ctx, trackedPR.Number, branches)
 		if err != nil {
 			slog.Warn("Failed to search for manual cherry-pick PRs", "pr", trackedPR.Number, "error", err)
 		} else {
@@ -147,7 +148,7 @@ func updateAllTrackedPRs(config *cmd.Config, client *github.Client) bool {
 			slog.Info("Checking tracked PR", "pr", trackedPR.Number, "branch", branch)
 
 			if cherryPick, cpExists := existingByBranch[branch]; cpExists {
-				newStatus := determineBranchStatus(cherryPick, config, client, trackedPR)
+				newStatus := determineBranchStatus(ctx, cherryPick, config, client, trackedPR)
 				if currentStatus.Status != newStatus.Status ||
 					(newStatus.PR != nil && (currentStatus.PR == nil || currentStatus.PR.Number != newStatus.PR.Number)) {
 					trackedPR.Branches[branch] = newStatus
@@ -155,7 +156,7 @@ func updateAllTrackedPRs(config *cmd.Config, client *github.Client) bool {
 					slog.Info("Updated branch status", "pr", trackedPR.Number, "branch", branch,
 						"old_status", currentStatus.Status, "new_status", newStatus.Status)
 				} else if currentStatus.Status == cmd.BranchStatusPicked && currentStatus.PR != nil {
-					prDetails, err := client.GetPRWithDetails(currentStatus.PR.Number)
+					prDetails, err := client.GetPRWithDetails(ctx, currentStatus.PR.Number)
 					if err == nil {
 						ciChanged := false
 						if currentStatus.PR.CIStatus != cmd.ParseCIStatus(prDetails.CIStatus) {
@@ -194,12 +195,12 @@ func isPRTracked(config *cmd.Config, prNumber int) bool {
 }
 
 // determineBranchStatus determines the status for a branch based on cherry-pick PR info
-func determineBranchStatus(cherryPick github.CherryPickPR, config *cmd.Config, client *github.Client, trackedPR *cmd.TrackedPR) cmd.BranchStatus {
+func determineBranchStatus(ctx context.Context, cherryPick github.CherryPickPR, _ *cmd.Config, client *github.Client, trackedPR *cmd.TrackedPR) cmd.BranchStatus {
 	if cherryPick.Failed {
 		return cmd.BranchStatus{Status: cmd.BranchStatusFailed}
 	}
 
-	prDetails, err := client.GetPRWithDetails(cherryPick.Number)
+	prDetails, err := client.GetPRWithDetails(ctx, cherryPick.Number)
 	if err != nil {
 		slog.Warn("Failed to fetch PR details", "pr", cherryPick.Number, "error", err)
 		return cmd.BranchStatus{

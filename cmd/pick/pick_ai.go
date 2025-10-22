@@ -9,7 +9,7 @@ import (
 )
 
 // launchInteractiveAIAssistant launches configured AI assistant with initial context, then hands control to user
-func (pc *PickCommand) launchInteractiveAIAssistant(sha string) error {
+func (pc *command) launchInteractiveAIAssistant(sha string) error {
 	if pc.Config.AIAssistantCommand == "" {
 		return fmt.Errorf("AI assistant command not configured. Set it using: cherry-picker config --ai-assistant <command>")
 	}
@@ -26,10 +26,7 @@ func (pc *PickCommand) launchInteractiveAIAssistant(sha string) error {
 	slog.Info("Found conflicted files", "count", len(conflictedFiles), "files", conflictedFiles)
 	slog.Info("Launching AI assistant with initial context", "command", pc.Config.AIAssistantCommand)
 
-	initialPrompt, err := pc.createInitialConflictPrompt(conflictedFiles, sha)
-	if err != nil {
-		return fmt.Errorf("failed to create initial prompt: %w", err)
-	}
+	initialPrompt := pc.createInitialConflictPrompt(conflictedFiles, sha)
 
 	fmt.Printf("💡 Starting AI session with conflict context, then handing control to you.\n")
 	fmt.Printf("   - The AI will receive details about the cherry-pick conflicts\n")
@@ -45,9 +42,9 @@ func (pc *PickCommand) launchInteractiveAIAssistant(sha string) error {
 	fmt.Printf("🤖 Starting %s session...\n", pc.Config.AIAssistantCommand)
 	fmt.Printf("💡 Copy the context above and paste it to start the conversation with the AI.\n")
 	fmt.Printf("   Press Enter to launch %s...\n", pc.Config.AIAssistantCommand)
-	fmt.Scanln()
+	_, _ = fmt.Scanln() // Ignore error, just waiting for Enter key
 
-	cmd := exec.Command(pc.Config.AIAssistantCommand)
+	cmd := exec.Command(pc.Config.AIAssistantCommand) //nolint:gosec // AI assistant command is user-configured
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -60,7 +57,7 @@ func (pc *PickCommand) launchInteractiveAIAssistant(sha string) error {
 }
 
 // createInitialConflictPrompt creates a detailed initial prompt for the AI about the cherry-pick conflicts
-func (pc *PickCommand) createInitialConflictPrompt(conflictedFiles []string, sha string) (string, error) {
+func (pc *command) createInitialConflictPrompt(conflictedFiles []string, sha string) string {
 	commitInfo, err := pc.getCommitInfo(sha)
 	if err != nil {
 		commitInfo = fmt.Sprintf("commit %s", sha[:8])
@@ -86,5 +83,5 @@ I'd like you to help me resolve these merge conflicts. You can see the conflicte
 Please start by examining the conflicted files and let me know what you see.`,
 		commitInfo, len(conflictedFiles), conflictedFiles, sha[:8])
 
-	return prompt, nil
+	return prompt
 }

@@ -1,7 +1,6 @@
 package github
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,18 +8,17 @@ import (
 )
 
 func TestNewClient(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	token := "test-token"
 
 	client := NewClient(ctx, token)
 
 	require.NotNil(t, client)
 	assert.NotNil(t, client.client)
-	assert.Equal(t, ctx, client.ctx)
 }
 
 func TestWithRepository(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	token := "test-token"
 
 	originalClient := NewClient(ctx, token)
@@ -59,15 +57,14 @@ func TestWithRepository(t *testing.T) {
 			assert.Empty(t, originalClient.org)
 			assert.Empty(t, originalClient.repo)
 
-			// Verify underlying client and context are shared
+			// Verify underlying client is shared
 			assert.Equal(t, originalClient.client, newClient.client)
-			assert.Equal(t, originalClient.ctx, newClient.ctx)
 		})
 	}
 }
 
 func TestWithRepository_ChainedCalls(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	client := NewClient(ctx, "test-token")
 
 	client1 := client.WithRepository("org1", "repo1")

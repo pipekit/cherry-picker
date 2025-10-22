@@ -1,6 +1,8 @@
+// Package retry implements the retry command for retrying failed CI workflows on cherry-pick PRs.
 package retry
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 
@@ -10,8 +12,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// RetryCommand encapsulates the retry command with common functionality
-type RetryCommand struct {
+// command encapsulates the retry command with common functionality
+type command struct {
 	commands.BaseCommand
 	PRNumber     int
 	TargetBranch string
@@ -19,7 +21,7 @@ type RetryCommand struct {
 
 // NewRetryCmd creates the retry command
 func NewRetryCmd(loadConfig func(string) (*cmd.Config, error), saveConfig func(string, *cmd.Config) error) *cobra.Command {
-	retryCmd := &RetryCommand{}
+	retryCmd := &command{}
 	var configFile string
 
 	cobraCmd := &cobra.Command{
@@ -49,11 +51,11 @@ Examples:
 			retryCmd.ConfigFile = &configFile
 			retryCmd.LoadConfig = loadConfig
 			retryCmd.SaveConfig = saveConfig
-			if err := retryCmd.Init(); err != nil {
+			if err := retryCmd.Init(cobraCmd.Context()); err != nil {
 				return err
 			}
 
-			return retryCmd.Run()
+			return retryCmd.Run(cobraCmd.Context())
 		},
 	}
 
@@ -63,10 +65,10 @@ Examples:
 }
 
 // Run executes the retry command
-func (rc *RetryCommand) Run() error {
+func (rc *command) Run(ctx context.Context) error {
 	// If no PR number, retry all eligible PRs and branches
 	if rc.PRNumber == 0 {
-		return rc.retryAllEligiblePRs()
+		return rc.retryAllEligiblePRs(ctx)
 	}
 
 	// Find the tracked PR
@@ -88,11 +90,12 @@ func (rc *RetryCommand) Run() error {
 
 	// If target branch specified, retry only that branch
 	if rc.TargetBranch != "" {
-		return rc.retryBranchCI(trackedPR, rc.TargetBranch)
+		return rc.retryBranchCI(ctx, trackedPR, rc.TargetBranch)
 	}
 
 	// Otherwise, retry all picked branches with failed CI for this PR
 	return commands.ExecuteOnEligibleBranchesForPR(
+		ctx,
 		trackedPR,
 		"retry",
 		commands.IsEligibleForRetry,
@@ -105,15 +108,15 @@ func (rc *RetryCommand) Run() error {
 }
 
 // retryBranchCI retries CI for a specific branch
-func (rc *RetryCommand) retryBranchCI(trackedPR *cmd.TrackedPR, targetBranch string) error {
-	return rc.retryBranchOperation(rc.GitHubClient, rc.Config, trackedPR, targetBranch, trackedPR.Branches[targetBranch])
+func (rc *command) retryBranchCI(ctx context.Context, trackedPR *cmd.TrackedPR, targetBranch string) error {
+	return rc.retryBranchOperation(ctx, rc.GitHubClient, rc.Config, trackedPR, targetBranch, trackedPR.Branches[targetBranch])
 }
 
 // retryBranchOperation is the core operation for retrying CI on a single branch
-func (rc *RetryCommand) retryBranchOperation(client *github.Client, config *cmd.Config, trackedPR *cmd.TrackedPR, branchName string, branchStatus cmd.BranchStatus) error {
+func (*command) retryBranchOperation(ctx context.Context, client *github.Client, _ *cmd.Config, trackedPR *cmd.TrackedPR, branchName string, branchStatus cmd.BranchStatus) error {
 	slog.Info("Retrying failed CI for PR", "original_pr", trackedPR.Number, "cherry_pick_pr", branchStatus.PR.Number, "branch", branchName)
 
-	err := client.RetryFailedWorkflows(branchStatus.PR.Number)
+	err := client.RetryFailedWorkflows(ctx, branchStatus.PR.Number)
 	if err != nil {
 		return fmt.Errorf("failed to retry CI for PR #%d branch %s (cherry-pick PR #%d): %w",
 			trackedPR.Number, branchName, branchStatus.PR.Number, err)
@@ -125,8 +128,9 @@ func (rc *RetryCommand) retryBranchOperation(client *github.Client, config *cmd.
 }
 
 // retryAllEligiblePRs retries CI for all eligible PRs and branches across the entire config
-func (rc *RetryCommand) retryAllEligiblePRs() error {
+func (rc *command) retryAllEligiblePRs(ctx context.Context) error {
 	return commands.ExecuteOnAllEligibleBranches(
+		ctx,
 		rc.Config,
 		"retry",
 		commands.IsEligibleForRetry,

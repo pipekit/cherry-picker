@@ -127,8 +127,8 @@ With some description.`,
 			// Create a commit with the test message
 			createCommit(t, repoDir, "test-"+tt.name+".txt", "test content", tt.commitMessage)
 
-			// Create PickCommand instance
-			pc := &PickCommand{}
+			// Create command instance
+			pc := &command{}
 
 			// Move Signed-off-by lines
 			err := pc.moveSignedOffByLinesToEnd()
@@ -156,7 +156,7 @@ func TestGetCommitInfo_Integration(t *testing.T) {
 	// Create a commit
 	sha := createCommit(t, repoDir, "test.txt", "content", "Test commit message")
 
-	pc := &PickCommand{}
+	pc := &command{}
 	info, err := pc.getCommitInfo(sha)
 
 	require.NoError(t, err)
@@ -212,7 +212,7 @@ func TestGetConflictedFiles_Integration(t *testing.T) {
 	}
 
 	// Now test getConflictedFiles
-	pc := &PickCommand{}
+	pc := &command{}
 	conflictedFiles, err := pc.getConflictedFiles()
 
 	require.NoError(t, err)
@@ -229,7 +229,7 @@ func TestGetConflictedFiles_NoConflicts(t *testing.T) {
 
 	createCommit(t, repoDir, "test.txt", "content", "Test commit")
 
-	pc := &PickCommand{}
+	pc := &command{}
 	conflictedFiles, err := pc.getConflictedFiles()
 
 	require.NoError(t, err)
@@ -238,7 +238,7 @@ func TestGetConflictedFiles_NoConflicts(t *testing.T) {
 
 // TestIsConflictError tests conflict error detection
 func TestIsConflictError(t *testing.T) {
-	pc := &PickCommand{}
+	pc := &command{}
 
 	tests := []struct {
 		name     string
@@ -298,7 +298,7 @@ func TestCherryPickCleanApply_Integration(t *testing.T) {
 	require.NoError(t, cmd.Run())
 
 	// Cherry-pick the commit from feature branch
-	pc := &PickCommand{}
+	pc := &command{}
 	err := pc.performCherryPick(sha)
 
 	require.NoError(t, err)
@@ -342,7 +342,7 @@ More notes here.`
 
 	createCommit(t, repoDir, "complex.txt", "content", complexMessage)
 
-	pc := &PickCommand{}
+	pc := &command{}
 	err := pc.moveSignedOffByLinesToEnd()
 	require.NoError(t, err)
 

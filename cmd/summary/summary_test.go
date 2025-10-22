@@ -9,7 +9,7 @@ import (
 func TestNewSummaryCmd(t *testing.T) {
 	t.Run("creates command with correct use", func(t *testing.T) {
 		configFile := "test-config.yaml"
-		loadConfig := func(path string) (*cmd.Config, error) {
+		loadConfig := func(_ string) (*cmd.Config, error) {
 			return &cmd.Config{}, nil
 		}
 
@@ -26,7 +26,7 @@ func TestNewSummaryCmd(t *testing.T) {
 
 	t.Run("creates command with correct short description", func(t *testing.T) {
 		configFile := "test-config.yaml"
-		loadConfig := func(path string) (*cmd.Config, error) {
+		loadConfig := func(_ string) (*cmd.Config, error) {
 			return &cmd.Config{}, nil
 		}
 
@@ -40,7 +40,7 @@ func TestNewSummaryCmd(t *testing.T) {
 
 	t.Run("requires exactly one argument", func(t *testing.T) {
 		configFile := "test-config.yaml"
-		loadConfig := func(path string) (*cmd.Config, error) {
+		loadConfig := func(_ string) (*cmd.Config, error) {
 			return &cmd.Config{}, nil
 		}
 
@@ -67,7 +67,7 @@ func TestNewSummaryCmd(t *testing.T) {
 
 	t.Run("has SilenceUsage enabled", func(t *testing.T) {
 		configFile := "test-config.yaml"
-		loadConfig := func(path string) (*cmd.Config, error) {
+		loadConfig := func(_ string) (*cmd.Config, error) {
 			return &cmd.Config{}, nil
 		}
 
@@ -79,36 +79,36 @@ func TestNewSummaryCmd(t *testing.T) {
 	})
 }
 
-func TestSummaryCommand_Structure(t *testing.T) {
+func TestCommand_Structure(t *testing.T) {
 	t.Run("has BaseCommand embedded", func(t *testing.T) {
-		summaryCmd := &SummaryCommand{}
+		summaryCmd := &command{}
 
 		// Check that we can access BaseCommand fields
 		summaryCmd.ConfigFile = new(string)
 		if summaryCmd.ConfigFile == nil {
-			t.Error("SummaryCommand should have ConfigFile from BaseCommand")
+			t.Error("command should have ConfigFile from BaseCommand")
 		}
 	})
 
 	t.Run("has TargetBranch field", func(t *testing.T) {
-		summaryCmd := &SummaryCommand{
+		summaryCmd := &command{
 			TargetBranch: "release-3.7",
 		}
 
 		if summaryCmd.TargetBranch != "release-3.7" {
-			t.Errorf("SummaryCommand.TargetBranch = %q, want %q", summaryCmd.TargetBranch, "release-3.7")
+			t.Errorf("command.TargetBranch = %q, want %q", summaryCmd.TargetBranch, "release-3.7")
 		}
 	})
 }
 
-func TestSummaryCommand_Run(t *testing.T) {
-	t.Run("Run method exists and can be called", func(t *testing.T) {
-		summaryCmd := &SummaryCommand{
+func TestCommand_Run(t *testing.T) {
+	t.Run("Run method exists and can be called", func(_ *testing.T) {
+		summaryCmd := &command{
 			TargetBranch: "release-3.7",
 		}
 
 		// We can't easily test Run without a full setup, but we can verify it exists
 		// and has the right signature by attempting to assign it
-		var _ func() error = summaryCmd.Run
+		var _ = summaryCmd.Run
 	})
 }

@@ -6,8 +6,6 @@ import (
 )
 
 func TestMessageFormatter_FormatSuccessMessage(t *testing.T) {
-	mf := &MessageFormatter{}
-
 	tests := []struct {
 		name         string
 		action       string
@@ -44,7 +42,7 @@ func TestMessageFormatter_FormatSuccessMessage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := mf.FormatSuccessMessage(tt.action, tt.prNumber, tt.targetBranch, tt.branches)
+			result := formatSuccessMessage(tt.action, tt.prNumber, tt.targetBranch, tt.branches)
 
 			for _, expectedSubstring := range tt.wantContains {
 				if !contains(result, expectedSubstring) {
@@ -140,7 +138,7 @@ func TestDisplayBulkOperationSuccess_Logic(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run(tt.name, func(_ *testing.T) {
 			// This test just verifies the function can be called without panicking
 			// In a real application, you might want to capture stdout to test the actual output
 			DisplayBulkOperationSuccess(tt.operation, tt.count, tt.errors, tt.scope)
@@ -174,7 +172,7 @@ func TestDisplaySuccessMessage_Logic(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run(tt.name, func(_ *testing.T) {
 			// This test just verifies the function can be called without panicking
 			// In a real application, you might want to capture stdout to test the actual output
 			DisplaySuccessMessage(tt.action, tt.prNumber, tt.targetBranch, tt.branches)

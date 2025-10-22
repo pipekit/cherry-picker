@@ -175,3 +175,4 @@ Tests use standard Go testing with dependency injection:
 - DCO checks are filtered out when determining CI status
 - The tool expects squash merges for PRs
 - Use testify/assert and testify/require when writing or refactoring tests
+- Always use the cobracmd Context() or t.Context(), never create one

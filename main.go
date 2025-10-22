@@ -1,3 +1,4 @@
+// package main is the entry point for the cherry-pick tool
 package main
 
 import (
@@ -25,7 +26,7 @@ func main() {
 		Short: "A CLI tool for managing cherry-picks across GitHub repositories",
 		Long: `cherry-picker is a CLI tool that helps manage cherry-picking commits
 across GitHub repositories using a YAML configuration file to track state.`,
-		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		PersistentPreRun: func(_ *cobra.Command, _ []string) {
 			setupLogger(logLevel, logFormat)
 		},
 	}

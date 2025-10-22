@@ -1,3 +1,4 @@
+// Package commands provides shared utilities for implementing cherry-picker CLI commands.
 package commands
 
 import (

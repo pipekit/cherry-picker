@@ -96,7 +96,7 @@ func TestRunConfig(t *testing.T) {
 
 			// Mock save function
 			var savedConfig *cmd.Config
-			saveConfig := func(filename string, config *cmd.Config) error {
+			saveConfig := func(_ string, config *cmd.Config) error {
 				if tt.saveError {
 					return fmt.Errorf("save error")
 				}
@@ -105,7 +105,7 @@ func TestRunConfig(t *testing.T) {
 			}
 
 			// Mock load function
-			loadConfig := func(filename string) (*cmd.Config, error) {
+			loadConfig := func(_ string) (*cmd.Config, error) {
 				if tt.fileExists {
 					// Return existing config
 					return &cmd.Config{
@@ -177,12 +177,12 @@ func TestRunConfig(t *testing.T) {
 
 func TestNewConfigCmd(t *testing.T) {
 	// Mock functions
-	loadConfig := func(filename string) (*cmd.Config, error) {
+	loadConfig := func(_ string) (*cmd.Config, error) {
 		return nil, fmt.Errorf("file not found")
 	}
 
 	var savedConfig *cmd.Config
-	saveConfig := func(filename string, config *cmd.Config) error {
+	saveConfig := func(_ string, config *cmd.Config) error {
 		savedConfig = config
 		return nil
 	}

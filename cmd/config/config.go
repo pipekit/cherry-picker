@@ -1,3 +1,4 @@
+// Package config implements the config command for initializing and updating cherry-picker configuration.
 package config
 
 import (
@@ -21,11 +22,11 @@ func NewConfigCmd(globalConfigFile *string, loadConfig func(string) (*cmd.Config
 		aiAssistantCommand string
 	)
 
-	cmd := createConfigCommand(globalConfigFile, &org, &repo, &sourceBranch, &aiAssistantCommand, loadConfig, saveConfig)
-	addConfigFlags(cmd, &org, &repo, &sourceBranch, &aiAssistantCommand)
+	cobraCmd := createConfigCommand(globalConfigFile, &org, &repo, &sourceBranch, &aiAssistantCommand, loadConfig, saveConfig)
+	addConfigFlags(cobraCmd, &org, &repo, &sourceBranch, &aiAssistantCommand)
 	// Note: org and repo are no longer marked as required since they can be auto-detected from git
 
-	return cmd
+	return cobraCmd
 }
 
 // createConfigCommand creates the basic config command structure
@@ -43,18 +44,18 @@ The source branch defaults to 'main' if not specified and not detected from git.
 Target branches are determined automatically from cherry-pick/* labels on PRs.
 AI assistant command is required for conflict resolution (e.g., 'cursor-agent' or 'claude').`,
 		SilenceUsage: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return runConfigWithGitDetection(*globalConfigFile, *org, *repo, *sourceBranch, *aiAssistantCommand, loadConfig, saveConfig)
 		},
 	}
 }
 
 // addConfigFlags adds all flags to the config command
-func addConfigFlags(cmd *cobra.Command, org, repo, sourceBranch, aiAssistantCommand *string) {
-	cmd.Flags().StringVarP(org, "org", "o", "", "GitHub organization or username (auto-detected from git if available)")
-	cmd.Flags().StringVarP(repo, "repo", "r", "", "GitHub repository name (auto-detected from git if available)")
-	cmd.Flags().StringVarP(sourceBranch, "source-branch", "s", "", "Source branch name (auto-detected from git if available, defaults to 'main')")
-	cmd.Flags().StringVarP(aiAssistantCommand, "ai-assistant", "a", "", "AI assistant command for conflict resolution (e.g., 'cursor-agent', 'claude')")
+func addConfigFlags(cobraCmd *cobra.Command, org, repo, sourceBranch, aiAssistantCommand *string) {
+	cobraCmd.Flags().StringVarP(org, "org", "o", "", "GitHub organization or username (auto-detected from git if available)")
+	cobraCmd.Flags().StringVarP(repo, "repo", "r", "", "GitHub repository name (auto-detected from git if available)")
+	cobraCmd.Flags().StringVarP(sourceBranch, "source-branch", "s", "", "Source branch name (auto-detected from git if available, defaults to 'main')")
+	cobraCmd.Flags().StringVarP(aiAssistantCommand, "ai-assistant", "a", "", "AI assistant command for conflict resolution (e.g., 'cursor-agent', 'claude')")
 }
 
 // runConfigWithGitDetection handles config creation with git auto-detection
@@ -206,14 +207,14 @@ func detectGitRepoInfo() (*GitRepoInfo, error) {
 
 // isGitRepository checks if current directory is in a git repository
 func isGitRepository() bool {
-	cmd := exec.Command("git", "rev-parse", "--git-dir")
-	return cmd.Run() == nil
+	gitCmd := exec.Command("git", "rev-parse", "--git-dir")
+	return gitCmd.Run() == nil
 }
 
 // parseGitRemote extracts org and repo from git remote origin
 func parseGitRemote() (string, string, error) {
-	cmd := exec.Command("git", "remote", "get-url", "origin")
-	output, err := cmd.Output()
+	gitCmd := exec.Command("git", "remote", "get-url", "origin")
+	output, err := gitCmd.Output()
 	if err != nil {
 		return "", "", err
 	}
@@ -241,8 +242,8 @@ func parseRemoteURL(remoteURL string) (string, string, error) {
 
 // getCurrentBranch gets the current git branch name
 func getCurrentBranch() (string, error) {
-	cmd := exec.Command("git", "branch", "--show-current")
-	output, err := cmd.Output()
+	gitCmd := exec.Command("git", "branch", "--show-current")
+	output, err := gitCmd.Output()
 	if err != nil {
 		return "", err
 	}

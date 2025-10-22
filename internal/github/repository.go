@@ -1,6 +1,7 @@
 package github
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -8,13 +9,13 @@ import (
 )
 
 // ListTags gets all tags from the repository
-func (c *Client) ListTags() ([]string, error) {
+func (c *Client) ListTags(ctx context.Context) ([]string, error) {
 	tags, err := paginatedList(func(page int) ([]*github.RepositoryTag, *github.Response, error) {
 		opts := &github.ListOptions{
 			PerPage: 100,
 			Page:    page,
 		}
-		return c.client.Repositories.ListTags(c.ctx, c.org, c.repo, opts)
+		return c.client.Repositories.ListTags(ctx, c.org, c.repo, opts)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tags: %w", err)
@@ -30,13 +31,13 @@ func (c *Client) ListTags() ([]string, error) {
 }
 
 // ListLabels fetches all labels from the repository
-func (c *Client) ListLabels() ([]*github.Label, error) {
+func (c *Client) ListLabels(ctx context.Context) ([]*github.Label, error) {
 	labels, err := paginatedList(func(page int) ([]*github.Label, *github.Response, error) {
 		opts := &github.ListOptions{
 			PerPage: 100,
 			Page:    page,
 		}
-		return c.client.Issues.ListLabels(c.ctx, c.org, c.repo, opts)
+		return c.client.Issues.ListLabels(ctx, c.org, c.repo, opts)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list labels: %w", err)
@@ -46,7 +47,7 @@ func (c *Client) ListLabels() ([]*github.Label, error) {
 }
 
 // GetCommitsSince gets commits on a branch since a specific tag/commit (equivalent to git log tag..branch)
-func (c *Client) GetCommitsSince(branch, sinceTag string) ([]Commit, error) {
+func (c *Client) GetCommitsSince(ctx context.Context, branch, sinceTag string) ([]Commit, error) {
 	var base string
 
 	if sinceTag == "v0.0.0" {
@@ -73,7 +74,7 @@ func (c *Client) GetCommitsSince(branch, sinceTag string) ([]Commit, error) {
 					Page:    page,
 				},
 			}
-			return c.client.Repositories.ListCommits(c.ctx, c.org, c.repo, opts)
+			return c.client.Repositories.ListCommits(ctx, c.org, c.repo, opts)
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to list commits: %w", err)
@@ -92,7 +93,7 @@ func (c *Client) GetCommitsSince(branch, sinceTag string) ([]Commit, error) {
 		return allCommits, nil
 	} else {
 		// Use Compare API for tag..branch comparison
-		comparison, _, err = c.client.Repositories.CompareCommits(c.ctx, c.org, c.repo, base, branch, &github.ListOptions{
+		comparison, _, err = c.client.Repositories.CompareCommits(ctx, c.org, c.repo, base, branch, &github.ListOptions{
 			PerPage: 100,
 		})
 		if err != nil {

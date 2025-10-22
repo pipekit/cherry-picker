@@ -9,6 +9,7 @@ import (
 
 	"github.com/alan/cherry-picker/cmd"
 	"github.com/alan/cherry-picker/internal/github"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGenerateMarkdownSummary(t *testing.T) {
@@ -213,17 +214,18 @@ func TestGenerateMarkdownSummary(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Capture stdout
-			oldStdout := os.Stdout
 			r, w, _ := os.Pipe()
-			os.Stdout = w
+			oldStdout := os.Stdout
+			os.Stdout = w                               //nolint:reassign // Temporarily redirect stdout to capture test output
+			t.Cleanup(func() { os.Stdout = oldStdout }) //nolint:reassign // Restore original stdout
 
 			generateMarkdownSummary(tt.version, tt.lastTag, tt.branch, tt.commits, tt.cherryPickMap, tt.pickedPRs, tt.openPRs)
 
 			w.Close()
-			os.Stdout = oldStdout
 
 			var buf bytes.Buffer
-			io.Copy(&buf, r)
+			_, err := io.Copy(&buf, r)
+			require.NoError(t, err)
 			output := buf.String()
 
 			// Check that all expected lines are present
@@ -239,9 +241,10 @@ func TestGenerateMarkdownSummary(t *testing.T) {
 func TestGenerateMarkdownSummaryFormat(t *testing.T) {
 	t.Run("output starts with version header", func(t *testing.T) {
 		// Capture stdout
-		oldStdout := os.Stdout
 		r, w, _ := os.Pipe()
-		os.Stdout = w
+		oldStdout := os.Stdout
+		os.Stdout = w                               //nolint:reassign // Temporarily redirect stdout to capture test output
+		t.Cleanup(func() { os.Stdout = oldStdout }) //nolint:reassign // Restore original stdout
 
 		commits := []github.Commit{
 			{Message: "fix: some fix (#1234)"},
@@ -250,10 +253,10 @@ func TestGenerateMarkdownSummaryFormat(t *testing.T) {
 		generateMarkdownSummary("v3.7.1", "v3.7.0", "release-3.7", commits, map[int]int{}, []PickedPR{}, []github.PR{})
 
 		w.Close()
-		os.Stdout = oldStdout
 
 		var buf bytes.Buffer
-		io.Copy(&buf, r)
+		_, err := io.Copy(&buf, r)
+		require.NoError(t, err)
 		output := buf.String()
 
 		lines := strings.Split(strings.TrimSpace(output), "\n")
@@ -268,9 +271,10 @@ func TestGenerateMarkdownSummaryFormat(t *testing.T) {
 
 	t.Run("completed items use [x]", func(t *testing.T) {
 		// Capture stdout
-		oldStdout := os.Stdout
 		r, w, _ := os.Pipe()
-		os.Stdout = w
+		oldStdout := os.Stdout
+		os.Stdout = w                               //nolint:reassign // Temporarily redirect stdout to capture test output
+		t.Cleanup(func() { os.Stdout = oldStdout }) //nolint:reassign // Restore original stdout
 
 		commits := []github.Commit{
 			{Message: "fix: some fix (#1234)"},
@@ -279,10 +283,10 @@ func TestGenerateMarkdownSummaryFormat(t *testing.T) {
 		generateMarkdownSummary("v3.7.1", "v3.7.0", "release-3.7", commits, map[int]int{}, []PickedPR{}, []github.PR{})
 
 		w.Close()
-		os.Stdout = oldStdout
 
 		var buf bytes.Buffer
-		io.Copy(&buf, r)
+		_, err := io.Copy(&buf, r)
+		require.NoError(t, err)
 		output := buf.String()
 
 		if !strings.Contains(output, "- [x]") {
@@ -292,9 +296,10 @@ func TestGenerateMarkdownSummaryFormat(t *testing.T) {
 
 	t.Run("in-progress items use [ ]", func(t *testing.T) {
 		// Capture stdout
-		oldStdout := os.Stdout
 		r, w, _ := os.Pipe()
-		os.Stdout = w
+		oldStdout := os.Stdout
+		os.Stdout = w                               //nolint:reassign // Temporarily redirect stdout to capture test output
+		t.Cleanup(func() { os.Stdout = oldStdout }) //nolint:reassign // Restore original stdout
 
 		pickedPRs := []PickedPR{
 			{OriginalPR: 1234, CherryPickPR: 5678, Status: cmd.BranchStatusPicked},
@@ -303,10 +308,10 @@ func TestGenerateMarkdownSummaryFormat(t *testing.T) {
 		generateMarkdownSummary("v3.7.1", "v3.7.0", "release-3.7", []github.Commit{}, map[int]int{}, pickedPRs, []github.PR{})
 
 		w.Close()
-		os.Stdout = oldStdout
 
 		var buf bytes.Buffer
-		io.Copy(&buf, r)
+		_, err := io.Copy(&buf, r)
+		require.NoError(t, err)
 		output := buf.String()
 
 		if !strings.Contains(output, "- [ ]") {

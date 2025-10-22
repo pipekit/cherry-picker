@@ -1,6 +1,8 @@
+// Package merge implements the merge command for squash-merging cherry-pick PRs with passing CI.
 package merge
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 
@@ -10,8 +12,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// MergeCommand encapsulates the merge command with common functionality
-type MergeCommand struct {
+// command encapsulates the merge command with common functionality
+type command struct {
 	commands.BaseCommand
 	PRNumber     int
 	TargetBranch string
@@ -19,7 +21,7 @@ type MergeCommand struct {
 
 // NewMergeCmd creates the merge command
 func NewMergeCmd(loadConfig func(string) (*cmd.Config, error), saveConfig func(string, *cmd.Config) error) *cobra.Command {
-	mergeCmd := &MergeCommand{}
+	mergeCmd := &command{}
 	var configFile string
 
 	cobraCmd := &cobra.Command{
@@ -50,11 +52,11 @@ Examples:
 			mergeCmd.ConfigFile = &configFile
 			mergeCmd.LoadConfig = loadConfig
 			mergeCmd.SaveConfig = saveConfig
-			if err := mergeCmd.Init(); err != nil {
+			if err := mergeCmd.Init(cobraCmd.Context()); err != nil {
 				return err
 			}
 
-			return mergeCmd.Run()
+			return mergeCmd.Run(cobraCmd.Context())
 		},
 	}
 
@@ -64,10 +66,10 @@ Examples:
 }
 
 // Run executes the merge command
-func (mc *MergeCommand) Run() error {
+func (mc *command) Run(ctx context.Context) error {
 	// If no PR number, merge all eligible PRs and branches
 	if mc.PRNumber == 0 {
-		return mc.mergeAllEligiblePRs()
+		return mc.mergeAllEligiblePRs(ctx)
 	}
 
 	// Find the tracked PR
@@ -89,11 +91,12 @@ func (mc *MergeCommand) Run() error {
 
 	// If target branch specified, merge only that branch
 	if mc.TargetBranch != "" {
-		return mc.mergeBranchPR(trackedPR, mc.TargetBranch)
+		return mc.mergeBranchPR(ctx, trackedPR, mc.TargetBranch)
 	}
 
 	// Otherwise, merge all eligible branches for this PR
 	return commands.ExecuteOnEligibleBranchesForPR(
+		ctx,
 		trackedPR,
 		"merge",
 		commands.IsEligibleForMerge,
@@ -106,8 +109,8 @@ func (mc *MergeCommand) Run() error {
 }
 
 // mergeBranchPR merges a specific branch's PR
-func (mc *MergeCommand) mergeBranchPR(trackedPR *cmd.TrackedPR, targetBranch string) error {
-	err := mc.mergeBranchOperation(mc.GitHubClient, mc.Config, trackedPR, targetBranch, trackedPR.Branches[targetBranch])
+func (mc *command) mergeBranchPR(ctx context.Context, trackedPR *cmd.TrackedPR, targetBranch string) error {
+	err := mc.mergeBranchOperation(ctx, mc.GitHubClient, mc.Config, trackedPR, targetBranch, trackedPR.Branches[targetBranch])
 	if err != nil {
 		return err
 	}
@@ -117,10 +120,10 @@ func (mc *MergeCommand) mergeBranchPR(trackedPR *cmd.TrackedPR, targetBranch str
 }
 
 // mergeBranchOperation is the core operation for merging a single branch
-func (mc *MergeCommand) mergeBranchOperation(client *github.Client, config *cmd.Config, trackedPR *cmd.TrackedPR, branchName string, branchStatus cmd.BranchStatus) error {
+func (*command) mergeBranchOperation(ctx context.Context, client *github.Client, _ *cmd.Config, trackedPR *cmd.TrackedPR, branchName string, branchStatus cmd.BranchStatus) error {
 	slog.Info("Merging PR", "original_pr", trackedPR.Number, "cherry_pick_pr", branchStatus.PR.Number, "branch", branchName)
 
-	err := client.MergePR(branchStatus.PR.Number, "squash")
+	err := client.MergePR(ctx, branchStatus.PR.Number, "squash")
 	if err != nil {
 		return fmt.Errorf("failed to merge PR #%d branch %s (cherry-pick PR #%d): %w",
 			trackedPR.Number, branchName, branchStatus.PR.Number, err)
@@ -136,8 +139,9 @@ func (mc *MergeCommand) mergeBranchOperation(client *github.Client, config *cmd.
 }
 
 // mergeAllEligiblePRs merges all eligible PRs and branches across the entire config
-func (mc *MergeCommand) mergeAllEligiblePRs() error {
+func (mc *command) mergeAllEligiblePRs(ctx context.Context) error {
 	return commands.ExecuteOnAllEligibleBranches(
+		ctx,
 		mc.Config,
 		"merge",
 		commands.IsEligibleForMerge,

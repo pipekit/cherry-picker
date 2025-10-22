@@ -1,6 +1,7 @@
 package github
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -40,9 +41,9 @@ func (checker *CIStatusChecker) isDCOCheck(checkName string) bool {
 }
 
 // GetStatus returns the overall CI status for a commit SHA
-func (checker *CIStatusChecker) GetStatus(sha string) (string, error) {
+func (checker *CIStatusChecker) GetStatus(ctx context.Context, sha string) (string, error) {
 	// Get both combined status and check runs for more accurate status
-	combinedStatus, checkRunsStatus, err := checker.getDetailedStatus(sha)
+	combinedStatus, checkRunsStatus, err := checker.getDetailedStatus(ctx, sha)
 	if err != nil {
 		return "unknown", fmt.Errorf("failed to fetch CI status for commit %s: %w", sha, err)
 	}
@@ -51,7 +52,7 @@ func (checker *CIStatusChecker) GetStatus(sha string) (string, error) {
 }
 
 // aggregateStatus combines combined status and check runs status with priority rules
-func (checker *CIStatusChecker) aggregateStatus(combinedStatus, checkRunsStatus string) string {
+func (*CIStatusChecker) aggregateStatus(combinedStatus, checkRunsStatus string) string {
 	// Priority: pending > failing > passing
 	if combinedStatus == "pending" || checkRunsStatus == "pending" {
 		return "pending"
@@ -70,24 +71,23 @@ func (checker *CIStatusChecker) aggregateStatus(combinedStatus, checkRunsStatus 
 }
 
 // getDetailedStatus fetches both traditional status checks and modern check runs
-func (checker *CIStatusChecker) getDetailedStatus(sha string) (string, string, error) {
-	combinedStatus, err := checker.getCombinedStatus(sha)
+func (checker *CIStatusChecker) getDetailedStatus(ctx context.Context, sha string) (string, string, error) {
+	combinedStatus, err := checker.getCombinedStatus(ctx, sha)
 	if err != nil {
 		return "unknown", "unknown", err
 	}
 
-	checkRunsStatus, err := checker.getCheckRunsStatus(sha)
+	checkRunsStatus, err := checker.getCheckRunsStatus(ctx, sha)
 	if err != nil {
-		// If check runs fail, just use combined status
-		return combinedStatus, "unknown", nil
+		return combinedStatus, "unknown", err
 	}
 
 	return combinedStatus, checkRunsStatus, nil
 }
 
 // getCombinedStatus gets traditional commit status, filtering DCO checks
-func (checker *CIStatusChecker) getCombinedStatus(sha string) (string, error) {
-	status, _, err := checker.client.client.Repositories.GetCombinedStatus(checker.client.ctx, checker.client.org, checker.client.repo, sha, nil)
+func (checker *CIStatusChecker) getCombinedStatus(ctx context.Context, sha string) (string, error) {
+	status, _, err := checker.client.client.Repositories.GetCombinedStatus(ctx, checker.client.org, checker.client.repo, sha, nil)
 	if err != nil {
 		return "unknown", err
 	}
@@ -108,7 +108,7 @@ func (checker *CIStatusChecker) getCombinedStatus(sha string) (string, error) {
 }
 
 // evaluateStatuses determines overall status from a list of status checks
-func (checker *CIStatusChecker) evaluateStatuses(statuses []*github.RepoStatus) string {
+func (*CIStatusChecker) evaluateStatuses(statuses []*github.RepoStatus) string {
 	hasFailure := false
 	hasPending := false
 	hasSuccess := false
@@ -139,8 +139,8 @@ func (checker *CIStatusChecker) evaluateStatuses(statuses []*github.RepoStatus) 
 }
 
 // getCheckRunsStatus gets status from GitHub Actions and modern check runs
-func (checker *CIStatusChecker) getCheckRunsStatus(sha string) (string, error) {
-	checkRuns, _, err := checker.client.client.Checks.ListCheckRunsForRef(checker.client.ctx, checker.client.org, checker.client.repo, sha, nil)
+func (checker *CIStatusChecker) getCheckRunsStatus(ctx context.Context, sha string) (string, error) {
+	checkRuns, _, err := checker.client.client.Checks.ListCheckRunsForRef(ctx, checker.client.org, checker.client.repo, sha, nil)
 	if err != nil {
 		return "unknown", err
 	}

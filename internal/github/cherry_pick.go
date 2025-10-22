@@ -1,8 +1,10 @@
 package github
 
 import (
+	"context"
 	"fmt"
 	"regexp"
+	"slices"
 
 	"github.com/google/go-github/v57/github"
 )
@@ -11,8 +13,8 @@ import (
 // Looks for patterns like:
 //   - Success: "🍒 Cherry-pick PR created for 3.7: #14944"
 //   - Failure: "Cherry-pick failed for 3.7" or similar failure messages
-func (c *Client) GetCherryPickPRsFromComments(prNumber int) ([]CherryPickPR, error) {
-	comments, _, err := c.client.Issues.ListComments(c.ctx, c.org, c.repo, prNumber, nil)
+func (c *Client) GetCherryPickPRsFromComments(ctx context.Context, prNumber int) ([]CherryPickPR, error) {
+	comments, _, err := c.client.Issues.ListComments(ctx, c.org, c.repo, prNumber, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch comments for PR #%d: %w", prNumber, err)
 	}
@@ -35,7 +37,10 @@ func (c *Client) GetCherryPickPRsFromComments(prNumber int) ([]CherryPickPR, err
 
 				// Convert PR number string to int
 				var cherryPickNum int
-				fmt.Sscanf(prNum, "%d", &cherryPickNum)
+				if _, err := fmt.Sscanf(prNum, "%d", &cherryPickNum); err != nil {
+					// Skip if PR number parsing fails
+					continue
+				}
 
 				cherryPickPRs = append(cherryPickPRs, CherryPickPR{
 					Number:     cherryPickNum,
@@ -66,7 +71,7 @@ func (c *Client) GetCherryPickPRsFromComments(prNumber int) ([]CherryPickPR, err
 
 // SearchManualCherryPickPRs searches for manually created cherry-pick PRs by title pattern
 // Looks for PRs with titles like "cherry-pick: ... (#14894)" targeting release branches
-func (c *Client) SearchManualCherryPickPRs(prNumber int, branches []string) ([]CherryPickPR, error) {
+func (c *Client) SearchManualCherryPickPRs(ctx context.Context, prNumber int, branches []string) ([]CherryPickPR, error) {
 	var cherryPickPRs []CherryPickPR
 
 	// Search for PRs containing "cherry-pick" and the PR number in title
@@ -78,7 +83,7 @@ func (c *Client) SearchManualCherryPickPRs(prNumber int, branches []string) ([]C
 		},
 	}
 
-	result, _, err := c.client.Search.Issues(c.ctx, query, opts)
+	result, _, err := c.client.Search.Issues(ctx, query, opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search for manual cherry-pick PRs: %w", err)
 	}
@@ -102,23 +107,20 @@ func (c *Client) SearchManualCherryPickPRs(prNumber int, branches []string) ([]C
 		}
 
 		// Get the full PR to determine target branch
-		pr, _, err := c.client.PullRequests.Get(c.ctx, c.org, c.repo, issue.GetNumber())
+		pr, _, err := c.client.PullRequests.Get(ctx, c.org, c.repo, issue.GetNumber())
 		if err != nil {
 			continue
 		}
 
 		// Check if this PR targets one of our tracked branches
 		targetBranch := pr.GetBase().GetRef()
-		for _, branch := range branches {
-			if targetBranch == branch {
-				cherryPickPRs = append(cherryPickPRs, CherryPickPR{
-					Number:     pr.GetNumber(),
-					Branch:     targetBranch,
-					OriginalPR: prNumber,
-					Failed:     false,
-				})
-				break
-			}
+		if slices.Contains(branches, targetBranch) {
+			cherryPickPRs = append(cherryPickPRs, CherryPickPR{
+				Number:     pr.GetNumber(),
+				Branch:     targetBranch,
+				OriginalPR: prNumber,
+				Failed:     false,
+			})
 		}
 	}
 

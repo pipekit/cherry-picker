@@ -9,7 +9,7 @@ import (
 )
 
 // performGitFetch fetches the latest changes from remote
-func (pc *PickCommand) performGitFetch() error {
+func (*command) performGitFetch() error {
 	slog.Info("Fetching latest changes from remote")
 	cmd := exec.Command("git", "fetch", "origin")
 	cmd.Stdout = os.Stdout
@@ -18,7 +18,7 @@ func (pc *PickCommand) performGitFetch() error {
 }
 
 // checkoutBranch switches to the target branch and force updates it to match upstream
-func (pc *PickCommand) checkoutBranch(branch string) error {
+func (*command) checkoutBranch(branch string) error {
 	slog.Info("Checking out branch", "branch", branch)
 
 	checkoutCmd := exec.Command("git", "checkout", branch)
@@ -29,7 +29,7 @@ func (pc *PickCommand) checkoutBranch(branch string) error {
 	}
 
 	slog.Info("Updating branch to match upstream", "branch", branch, "upstream", fmt.Sprintf("origin/%s", branch))
-	resetCmd := exec.Command("git", "reset", "--hard", fmt.Sprintf("origin/%s", branch))
+	resetCmd := exec.Command("git", "reset", "--hard", fmt.Sprintf("origin/%s", branch)) //nolint:gosec // Branch name is from tracked config
 	resetCmd.Stdout = os.Stdout
 	resetCmd.Stderr = os.Stderr
 	if err := resetCmd.Run(); err != nil {
@@ -40,16 +40,16 @@ func (pc *PickCommand) checkoutBranch(branch string) error {
 }
 
 // createAndCheckoutBranch creates a new branch and checks it out, recreating if it already exists
-func (pc *PickCommand) createAndCheckoutBranch(branchName string) error {
+func (*command) createAndCheckoutBranch(branchName string) error {
 	slog.Info("Creating and checking out branch", "branch", branchName)
 
-	// Delete local branch if it exists
+	// Delete local branch if it exists (ignore error if branch doesn't exist)
 	deleteLocalCmd := exec.Command("git", "branch", "-D", branchName)
-	deleteLocalCmd.Run()
+	_ = deleteLocalCmd.Run()
 
-	// Delete remote branch if it exists
+	// Delete remote branch if it exists (ignore error if branch doesn't exist)
 	deleteRemoteCmd := exec.Command("git", "push", "origin", "--delete", branchName)
-	deleteRemoteCmd.Run()
+	_ = deleteRemoteCmd.Run()
 
 	// Create and checkout the new branch
 	cmd := exec.Command("git", "checkout", "-b", branchName)
@@ -59,7 +59,7 @@ func (pc *PickCommand) createAndCheckoutBranch(branchName string) error {
 }
 
 // performCherryPick executes the git cherry-pick command with AI integration for conflicts
-func (pc *PickCommand) performCherryPick(sha string) error {
+func (pc *command) performCherryPick(sha string) error {
 	slog.Info("Cherry-picking commit", "sha", sha)
 	cmd := exec.Command("git", "cherry-pick", "-x", "--signoff", sha)
 	cmd.Stdout = os.Stdout
@@ -117,7 +117,7 @@ func (pc *PickCommand) performCherryPick(sha string) error {
 }
 
 // pushBranch pushes a branch to origin
-func (pc *PickCommand) pushBranch(branchName string) error {
+func (*command) pushBranch(branchName string) error {
 	slog.Info("Pushing branch", "branch", branchName)
 	cmd := exec.Command("git", "push", "origin", branchName)
 	cmd.Stdout = os.Stdout
@@ -126,7 +126,7 @@ func (pc *PickCommand) pushBranch(branchName string) error {
 }
 
 // moveSignedOffByLinesToEnd ensures Signed-off-by lines are at the end of the commit message
-func (pc *PickCommand) moveSignedOffByLinesToEnd() error {
+func (*command) moveSignedOffByLinesToEnd() error {
 	getMessageCmd := exec.Command("git", "log", "-1", "--pretty=format:%B")
 	messageBytes, err := getMessageCmd.Output()
 	if err != nil {
@@ -192,7 +192,7 @@ func (pc *PickCommand) moveSignedOffByLinesToEnd() error {
 	if finalMessage != originalMessage {
 		slog.Info("Moving Signed-off-by lines to end of commit message")
 
-		amendCmd := exec.Command("git", "commit", "--amend", "-m", finalMessage)
+		amendCmd := exec.Command("git", "commit", "--amend", "-m", finalMessage) //nolint:gosec // Commit message is from current git commit
 		amendCmd.Stdout = os.Stdout
 		amendCmd.Stderr = os.Stderr
 
@@ -205,7 +205,7 @@ func (pc *PickCommand) moveSignedOffByLinesToEnd() error {
 }
 
 // getCommitInfo gets a human-readable description of a commit
-func (pc *PickCommand) getCommitInfo(sha string) (string, error) {
+func (*command) getCommitInfo(sha string) (string, error) {
 	cmd := exec.Command("git", "log", "--oneline", "-1", sha)
 	output, err := cmd.Output()
 	if err != nil {
@@ -215,7 +215,7 @@ func (pc *PickCommand) getCommitInfo(sha string) (string, error) {
 }
 
 // getConflictedFiles returns a list of files with merge conflicts
-func (pc *PickCommand) getConflictedFiles() ([]string, error) {
+func (*command) getConflictedFiles() ([]string, error) {
 	cmd := exec.Command("git", "diff", "--name-only", "--diff-filter=U")
 	output, err := cmd.Output()
 	if err != nil {
@@ -234,7 +234,7 @@ func (pc *PickCommand) getConflictedFiles() ([]string, error) {
 }
 
 // isConflictError checks if the error is due to merge conflicts
-func (pc *PickCommand) isConflictError(err error) bool {
+func (*command) isConflictError(err error) bool {
 	if err == nil {
 		return false
 	}

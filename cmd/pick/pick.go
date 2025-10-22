@@ -1,6 +1,8 @@
+// Package pick implements the pick command for AI-assisted cherry-picking of PRs that bots couldn't handle.
 package pick
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -10,8 +12,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// PickCommand encapsulates the pick command with common functionality
-type PickCommand struct {
+// command encapsulates the pick command with common functionality
+type command struct {
 	commands.BaseCommand
 	PRNumber     int
 	TargetBranch string
@@ -19,7 +21,7 @@ type PickCommand struct {
 
 // NewPickCmd creates and returns the pick command
 func NewPickCmd(globalConfigFile *string, loadConfig func(string) (*cmd.Config, error), saveConfig func(string, *cmd.Config) error) *cobra.Command {
-	pickCmd := &PickCommand{}
+	pickCmd := &command{}
 
 	cobraCmd := &cobra.Command{
 		Use:   "pick <pr-number> [target-branch]",
@@ -46,11 +48,11 @@ Conflicts are automatically resolved using configured AI assistant.`,
 			pickCmd.ConfigFile = globalConfigFile
 			pickCmd.LoadConfig = loadConfig
 			pickCmd.SaveConfig = saveConfig
-			if err := pickCmd.Init(); err != nil {
+			if err := pickCmd.Init(cobraCmd.Context()); err != nil {
 				return err
 			}
 
-			return pickCmd.Run()
+			return pickCmd.Run(cobraCmd.Context())
 		},
 	}
 
@@ -58,12 +60,12 @@ Conflicts are automatically resolved using configured AI assistant.`,
 }
 
 // Run executes the pick command
-func (pc *PickCommand) Run() error {
-	return pc.runPick()
+func (pc *command) Run(ctx context.Context) error {
+	return pc.runPick(ctx)
 }
 
 // runPick executes the full cherry-pick workflow
-func (pc *PickCommand) runPick() error {
+func (pc *command) runPick(ctx context.Context) error {
 	// Find and validate PR (4 lines vs ~15 lines)
 	pr, err := commands.FindAndValidatePR(pc.Config, pc.PRNumber)
 	if err != nil {
@@ -83,7 +85,7 @@ func (pc *PickCommand) runPick() error {
 		return err
 	}
 
-	sha, err := pc.getCommitSHA(pc.PRNumber)
+	sha, err := pc.getCommitSHA(ctx, pc.PRNumber)
 	if err != nil {
 		return err
 	}
@@ -94,7 +96,7 @@ func (pc *PickCommand) runPick() error {
 
 	// Perform cherry-pick for each branch with immediate saving
 	for _, branch := range branches {
-		result, err := pc.performCherryPickForBranch(sha, branch, pc.PRNumber, pr.Title)
+		result, err := pc.performCherryPickForBranch(ctx, sha, branch, pc.PRNumber, pr.Title)
 		if err != nil {
 			return err
 		}
@@ -118,7 +120,7 @@ func (pc *PickCommand) runPick() error {
 }
 
 // runPickForTest executes pick for testing without git operations
-func (pc *PickCommand) runPickForTest() error {
+func (pc *command) runPickForTest() error {
 	// Find and validate PR
 	pr, err := commands.FindAndValidatePR(pc.Config, pc.PRNumber)
 	if err != nil {
@@ -146,7 +148,7 @@ func (pc *PickCommand) runPickForTest() error {
 }
 
 // validatePickableStatus validates branches can be picked (must be in 'failed' status)
-func (pc *PickCommand) validatePickableStatus(pr *cmd.TrackedPR, branches []string) error {
+func (pc *command) validatePickableStatus(pr *cmd.TrackedPR, branches []string) error {
 	if pr.Branches == nil {
 		pr.Branches = make(map[string]cmd.BranchStatus)
 	}
@@ -164,7 +166,7 @@ func (pc *PickCommand) validatePickableStatus(pr *cmd.TrackedPR, branches []stri
 }
 
 // updatePRStatus updates the PR status to picked for specified branches
-func (pc *PickCommand) updatePRStatus(pr *cmd.TrackedPR, branches []string) {
+func (*command) updatePRStatus(pr *cmd.TrackedPR, branches []string) {
 	for _, branch := range branches {
 		pr.Branches[branch] = cmd.BranchStatus{
 			Status: cmd.BranchStatusPicked,
@@ -174,7 +176,7 @@ func (pc *PickCommand) updatePRStatus(pr *cmd.TrackedPR, branches []string) {
 }
 
 // updateSingleBranchStatus updates PR status for a single branch with cherry-pick result
-func (pc *PickCommand) updateSingleBranchStatus(pr *cmd.TrackedPR, branch string, result *CherryPickResult) {
+func (*command) updateSingleBranchStatus(pr *cmd.TrackedPR, branch string, result *CherryPickResult) {
 	pr.Branches[branch] = cmd.BranchStatus{
 		Status: cmd.BranchStatusPicked,
 		PR: &cmd.PickPR{
@@ -186,7 +188,7 @@ func (pc *PickCommand) updateSingleBranchStatus(pr *cmd.TrackedPR, branch string
 }
 
 // performCherryPickForBranch performs cherry-pick for a specific branch
-func (pc *PickCommand) performCherryPickForBranch(sha, branch string, prNumber int, originalTitle string) (*CherryPickResult, error) {
+func (pc *command) performCherryPickForBranch(ctx context.Context, sha, branch string, prNumber int, originalTitle string) (*CherryPickResult, error) {
 	cherryPickBranch := fmt.Sprintf("cherry-pick-%d-%s", prNumber, branch)
 
 	if err := pc.checkoutBranch(branch); err != nil {
@@ -209,7 +211,7 @@ func (pc *PickCommand) performCherryPickForBranch(sha, branch string, prNumber i
 		return nil, fmt.Errorf("git push failed for branch %s: %w", cherryPickBranch, err)
 	}
 
-	cherryPickPRNumber, err := pc.createCherryPickPR(cherryPickBranch, branch, prNumber, originalTitle)
+	cherryPickPRNumber, err := pc.createCherryPickPR(ctx, cherryPickBranch, branch, prNumber, originalTitle)
 	if err != nil {
 		return nil, err
 	}

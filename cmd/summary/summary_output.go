@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/alan/cherry-picker/cmd"
 	"github.com/alan/cherry-picker/internal/github"
 )
 
 // generateMarkdownSummary outputs the markdown summary
-func generateMarkdownSummary(version, lastTag, branch string, commits []github.Commit, cherryPickMap map[int]int, pickedPRs []PickedPR, openPRs []github.PR) {
+func generateMarkdownSummary(version, lastTag, _ string, commits []github.Commit, cherryPickMap map[int]int, pickedPRs []PickedPR, openPRs []github.PR) {
 	if len(commits) == 0 && len(pickedPRs) == 0 && len(openPRs) == 0 {
 		fmt.Printf("No changes found since %s\n", lastTag)
 		return
@@ -52,10 +53,13 @@ func generateMarkdownSummary(version, lastTag, branch string, commits []github.C
 	// Add picked PRs that haven't been seen in commits yet
 	for _, pickedPR := range pickedPRs {
 		if !seenCherryPickPRs[pickedPR.CherryPickPR] {
-			if pickedPR.Status == "picked" {
+			switch pickedPR.Status {
+			case cmd.BranchStatusPicked:
 				fmt.Printf("- [ ] #%d cherry-picked as #%d\n", pickedPR.OriginalPR, pickedPR.CherryPickPR)
-			} else if pickedPR.Status == "merged" {
+			case cmd.BranchStatusMerged:
 				fmt.Printf("- [x] #%d cherry-picked as #%d\n", pickedPR.OriginalPR, pickedPR.CherryPickPR)
+			case cmd.BranchStatusPending, cmd.BranchStatusFailed:
+				// These statuses shouldn't appear in picked PRs, but handle them for exhaustiveness
 			}
 		}
 	}

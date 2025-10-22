@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -77,29 +78,29 @@ func TestCommandBuilder_BuildCommand(t *testing.T) {
 		ExampleUsage: []string{"test 123", "test 456 branch"},
 	}
 
-	runFunc := func(cmd *cobra.Command, args []string) error {
+	runFunc := func(_ *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	cmd := builder.BuildCommand(runFunc)
+	cobraCmd := builder.BuildCommand(runFunc)
 
-	if cmd.Use != "test" {
-		t.Errorf("BuildCommand() Use = %v, want %v", cmd.Use, "test")
+	if cobraCmd.Use != "test" {
+		t.Errorf("BuildCommand() Use = %v, want %v", cobraCmd.Use, "test")
 	}
 
-	if cmd.Short != "Test command" {
-		t.Errorf("BuildCommand() Short = %v, want %v", cmd.Short, "Test command")
+	if cobraCmd.Short != "Test command" {
+		t.Errorf("BuildCommand() Short = %v, want %v", cobraCmd.Short, "Test command")
 	}
 
-	if !strings.Contains(cmd.Long, "Examples:") {
-		t.Errorf("BuildCommand() Long should contain examples, got %v", cmd.Long)
+	if !strings.Contains(cobraCmd.Long, "Examples:") {
+		t.Errorf("BuildCommand() Long should contain examples, got %v", cobraCmd.Long)
 	}
 
-	if !strings.Contains(cmd.Long, "test 123") {
-		t.Errorf("BuildCommand() Long should contain example usage, got %v", cmd.Long)
+	if !strings.Contains(cobraCmd.Long, "test 123") {
+		t.Errorf("BuildCommand() Long should contain example usage, got %v", cobraCmd.Long)
 	}
 
-	if !cmd.SilenceUsage {
+	if !cobraCmd.SilenceUsage {
 		t.Errorf("BuildCommand() SilenceUsage should be true")
 	}
 }
@@ -113,21 +114,21 @@ func TestCommandBuilder_BuildCommandWithoutExamples(t *testing.T) {
 		MaxArgs: 1,
 	}
 
-	runFunc := func(cmd *cobra.Command, args []string) error {
+	runFunc := func(_ *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	cmd := builder.BuildCommand(runFunc)
+	cobraCmd := builder.BuildCommand(runFunc)
 
-	if strings.Contains(cmd.Long, "Examples:") {
-		t.Errorf("BuildCommand() Long should not contain examples when none provided, got %v", cmd.Long)
+	if strings.Contains(cobraCmd.Long, "Examples:") {
+		t.Errorf("BuildCommand() Long should not contain examples when none provided, got %v", cobraCmd.Long)
 	}
 }
 
 // Test helper functions for execution patterns (minimal testing since they require GitHub client)
-func TestBranchOperationFuncSignature(t *testing.T) {
+func TestBranchOperationFuncSignature(_ *testing.T) {
 	// This test ensures the BranchOperationFunc type signature is correct
-	var _ BranchOperationFunc = func(client *github.Client, config *cmd.Config, trackedPR *cmd.TrackedPR, branchName string, branchStatus cmd.BranchStatus) error {
+	var _ BranchOperationFunc = func(_ context.Context, _ *github.Client, _ *cmd.Config, _ *cmd.TrackedPR, _ string, _ cmd.BranchStatus) error {
 		return nil
 	}
 }

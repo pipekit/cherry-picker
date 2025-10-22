@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/alan/cherry-picker/cmd"
@@ -9,7 +10,7 @@ import (
 )
 
 // BranchOperationFunc defines a function that operates on a single branch
-type BranchOperationFunc func(client *github.Client, config *cmd.Config, trackedPR *cmd.TrackedPR, branchName string, branchStatus cmd.BranchStatus) error
+type BranchOperationFunc func(ctx context.Context, client *github.Client, config *cmd.Config, trackedPR *cmd.TrackedPR, branchName string, branchStatus cmd.BranchStatus) error
 
 // ExecuteAllResult encapsulates the result of bulk operations
 type ExecuteAllResult struct {
@@ -33,6 +34,7 @@ func HandleExecuteAllResult(result *ExecuteAllResult, targetDescription string) 
 
 // ExecuteOnAllEligibleBranches executes an operation on all eligible branches across all PRs
 func ExecuteOnAllEligibleBranches(
+	ctx context.Context,
 	config *cmd.Config,
 	operationName string,
 	eligibilityPredicate BranchValidationPredicate,
@@ -42,7 +44,7 @@ func ExecuteOnAllEligibleBranches(
 	requiresConfigSave bool,
 ) error {
 	// Initialize GitHub client
-	client, _, err := InitializeGitHubClient(config)
+	client, _, err := InitializeGitHubClient(ctx, config)
 	if err != nil {
 		return err
 	}
@@ -65,7 +67,7 @@ func ExecuteOnAllEligibleBranches(
 				continue
 			}
 
-			err := operation(client, config, trackedPR, branchName, branchStatus)
+			err := operation(ctx, client, config, trackedPR, branchName, branchStatus)
 			if err != nil {
 				errors = append(errors, fmt.Errorf("PR #%d branch %s: %w", trackedPR.Number, branchName, err))
 				continue
@@ -99,6 +101,7 @@ func ExecuteOnAllEligibleBranches(
 
 // ExecuteOnEligibleBranchesForPR executes an operation on all eligible branches for a specific PR
 func ExecuteOnEligibleBranchesForPR(
+	ctx context.Context,
 	trackedPR *cmd.TrackedPR,
 	operationName string,
 	eligibilityPredicate BranchValidationPredicate,
@@ -109,7 +112,7 @@ func ExecuteOnEligibleBranchesForPR(
 	requiresConfigSave bool,
 ) error {
 	// Initialize GitHub client
-	client, _, err := InitializeGitHubClient(config)
+	client, _, err := InitializeGitHubClient(ctx, config)
 	if err != nil {
 		return err
 	}
@@ -125,7 +128,7 @@ func ExecuteOnEligibleBranchesForPR(
 			continue
 		}
 
-		err := operation(client, config, trackedPR, branchName, branchStatus)
+		err := operation(ctx, client, config, trackedPR, branchName, branchStatus)
 		if err != nil {
 			errors = append(errors, fmt.Errorf("branch %s: %w", branchName, err))
 			continue
@@ -165,7 +168,7 @@ type CommandBuilder struct {
 }
 
 // BuildCommand creates a cobra command with common patterns
-func (cb *CommandBuilder) BuildCommand(runFunc func(cmd *cobra.Command, args []string) error) *cobra.Command {
+func (cb *CommandBuilder) BuildCommand(runFunc func(cobraCmd *cobra.Command, args []string) error) *cobra.Command {
 	cobraCmd := &cobra.Command{
 		Use:          cb.Use,
 		Short:        cb.Short,

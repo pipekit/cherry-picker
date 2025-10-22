@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
@@ -15,90 +14,81 @@ import (
 
 // TestNewFetchCmd tests command creation and initialization
 func TestNewFetchCmd(t *testing.T) {
-	loadConfig := func(filename string) (*cmd.Config, error) {
+	loadConfig := func(_ string) (*cmd.Config, error) {
 		return &cmd.Config{}, nil
 	}
-	saveConfig := func(filename string, config *cmd.Config) error {
+	saveConfig := func(_ string, _ *cmd.Config) error {
 		return nil
 	}
 
 	configFile := "test-config.yaml"
-	cmd := NewFetchCmd(&configFile, loadConfig, saveConfig)
+	cobraCmd := NewFetchCmd(&configFile, loadConfig, saveConfig)
 
-	assert.NotNil(t, cmd)
-	assert.Equal(t, "fetch", cmd.Use)
-	assert.Equal(t, "Fetch new merged PRs from GitHub that need cherry-picking decisions", cmd.Short)
-	assert.NotEmpty(t, cmd.Long)
-	assert.NotNil(t, cmd.RunE)
+	assert.NotNil(t, cobraCmd)
+	assert.Equal(t, "fetch", cobraCmd.Use)
+	assert.Equal(t, "Fetch new merged PRs from GitHub that need cherry-picking decisions", cobraCmd.Short)
+	assert.NotEmpty(t, cobraCmd.Long)
+	assert.NotNil(t, cobraCmd.RunE)
 
 	// Test flags
-	sinceFlag := cmd.Flags().Lookup("since")
+	sinceFlag := cobraCmd.Flags().Lookup("since")
 	assert.NotNil(t, sinceFlag, "should have since flag")
 
 	// Config flag should not be present as it's global
-	configFlag := cmd.Flags().Lookup("config")
+	configFlag := cobraCmd.Flags().Lookup("config")
 	assert.Nil(t, configFlag, "should not have local config flag (it's global)")
 }
 
 // TestFetchCmd_RunE_InvalidSinceDate tests error handling for invalid since date
 func TestFetchCmd_RunE_InvalidSinceDate(t *testing.T) {
-	os.Setenv("GITHUB_TOKEN", "test-token")
-	defer os.Unsetenv("GITHUB_TOKEN")
+	t.Setenv("GITHUB_TOKEN", "test-token")
 
-	loadConfig := func(path string) (*cmd.Config, error) {
+	loadConfig := func(_ string) (*cmd.Config, error) {
 		return &cmd.Config{
 			Org:  "test-org",
 			Repo: "test-repo",
 		}, nil
 	}
-	saveConfig := func(path string, config *cmd.Config) error {
+	saveConfig := func(_ string, _ *cmd.Config) error {
 		return nil
 	}
 
 	configFile := "test-config.yaml"
-	cmd := NewFetchCmd(&configFile, loadConfig, saveConfig)
+	cobraCmd := NewFetchCmd(&configFile, loadConfig, saveConfig)
 
 	// Set an invalid since date flag
-	err := cmd.Flags().Set("since", "invalid-date")
+	err := cobraCmd.Flags().Set("since", "invalid-date")
 	require.NoError(t, err)
 
-	err = cmd.RunE(cmd, []string{})
+	err = cobraCmd.RunE(cobraCmd, []string{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid date format")
 }
 
 // TestFetchCmd_RunE_ConfigLoadError tests error when config fails to load
 func TestFetchCmd_RunE_ConfigLoadError(t *testing.T) {
-	os.Setenv("GITHUB_TOKEN", "test-token")
-	defer os.Unsetenv("GITHUB_TOKEN")
+	t.Setenv("GITHUB_TOKEN", "test-token")
 
-	loadConfig := func(path string) (*cmd.Config, error) {
+	loadConfig := func(_ string) (*cmd.Config, error) {
 		return nil, errors.New("config load error")
 	}
-	saveConfig := func(path string, config *cmd.Config) error {
+	saveConfig := func(_ string, _ *cmd.Config) error {
 		return nil
 	}
 
 	configFile := "test-config.yaml"
-	cmd := NewFetchCmd(&configFile, loadConfig, saveConfig)
+	cobraCmd := NewFetchCmd(&configFile, loadConfig, saveConfig)
 
-	err := cmd.RunE(cmd, []string{})
+	err := cobraCmd.RunE(cobraCmd, []string{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "config load error")
 }
 
-// TestFetchCommand_Init_NoToken tests initialization without GitHub token
-func TestFetchCommand_Init_NoToken(t *testing.T) {
-	// Temporarily unset GITHUB_TOKEN
-	originalToken := os.Getenv("GITHUB_TOKEN")
-	os.Unsetenv("GITHUB_TOKEN")
-	defer func() {
-		if originalToken != "" {
-			os.Setenv("GITHUB_TOKEN", originalToken)
-		}
-	}()
+// TestCommand_Init_NoToken tests initialization without GitHub token
+func TestCommand_Init_NoToken(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "")
 
-	loadConfig := func(filename string) (*cmd.Config, error) {
+	loadConfig := func(_ string) (*cmd.Config, error) {
 		return &cmd.Config{
 			Org:                "testorg",
 			AIAssistantCommand: "cursor-agent",
@@ -106,28 +96,27 @@ func TestFetchCommand_Init_NoToken(t *testing.T) {
 			SourceBranch:       "main",
 		}, nil
 	}
-	saveConfig := func(filename string, config *cmd.Config) error {
+	saveConfig := func(_ string, _ *cmd.Config) error {
 		return nil
 	}
 
 	configFile := "test-config.yaml"
-	fetchCmd := &FetchCommand{}
+	fetchCmd := &command{}
 	fetchCmd.ConfigFile = &configFile
 	fetchCmd.LoadConfig = loadConfig
 	fetchCmd.SaveConfig = saveConfig
 	fetchCmd.SinceDate = ""
 
-	err := fetchCmd.Init()
+	err := fetchCmd.Init(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "GITHUB_TOKEN environment variable is required")
 }
 
-// TestFetchCommand_Run_InvalidDateFormat tests Run with invalid date format
-func TestFetchCommand_Run_InvalidDateFormat(t *testing.T) {
-	os.Setenv("GITHUB_TOKEN", "test-token")
-	defer os.Unsetenv("GITHUB_TOKEN")
+// TestCommand_Run_InvalidDateFormat tests Run with invalid date format
+func TestCommand_Run_InvalidDateFormat(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "test-token")
 
-	loadConfig := func(filename string) (*cmd.Config, error) {
+	loadConfig := func(_ string) (*cmd.Config, error) {
 		return &cmd.Config{
 			Org:                "testorg",
 			AIAssistantCommand: "cursor-agent",
@@ -135,44 +124,43 @@ func TestFetchCommand_Run_InvalidDateFormat(t *testing.T) {
 			SourceBranch:       "main",
 		}, nil
 	}
-	saveConfig := func(filename string, config *cmd.Config) error {
+	saveConfig := func(_ string, _ *cmd.Config) error {
 		return nil
 	}
 
 	configFile := "test-config.yaml"
-	fetchCmd := &FetchCommand{}
+	fetchCmd := &command{}
 	fetchCmd.ConfigFile = &configFile
 	fetchCmd.LoadConfig = loadConfig
 	fetchCmd.SaveConfig = saveConfig
 	fetchCmd.SinceDate = "invalid-date"
 
-	err := fetchCmd.Init()
+	err := fetchCmd.Init(t.Context())
 	require.NoError(t, err)
 
-	err = fetchCmd.Run()
+	err = fetchCmd.Run(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid date format")
 }
 
-// TestFetchCommand_Init_LoadConfigError tests Init with config load failure
-func TestFetchCommand_Init_LoadConfigError(t *testing.T) {
-	os.Setenv("GITHUB_TOKEN", "test-token")
-	defer os.Unsetenv("GITHUB_TOKEN")
+// TestCommand_Init_LoadConfigError tests Init with config load failure
+func TestCommand_Init_LoadConfigError(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "test-token")
 
-	loadConfig := func(filename string) (*cmd.Config, error) {
+	loadConfig := func(_ string) (*cmd.Config, error) {
 		return nil, fmt.Errorf("config load error")
 	}
-	saveConfig := func(filename string, config *cmd.Config) error {
+	saveConfig := func(_ string, _ *cmd.Config) error {
 		return nil
 	}
 
 	configFile := "test-config.yaml"
-	fetchCmd := &FetchCommand{}
+	fetchCmd := &command{}
 	fetchCmd.ConfigFile = &configFile
 	fetchCmd.LoadConfig = loadConfig
 	fetchCmd.SaveConfig = saveConfig
 
-	err := fetchCmd.Init()
+	err := fetchCmd.Init(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "config load error")
 }
@@ -191,6 +179,7 @@ func TestDetermineSinceDate(t *testing.T) {
 			sinceDate: "2024-01-15",
 			wantErr:   false,
 			checkResult: func(t *testing.T, result time.Time) {
+				t.Helper()
 				expected := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
 				assert.Equal(t, expected, result)
 			},
@@ -206,6 +195,7 @@ func TestDetermineSinceDate(t *testing.T) {
 			lastFetchDate: ptrTime(time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)),
 			wantErr:       false,
 			checkResult: func(t *testing.T, result time.Time) {
+				t.Helper()
 				expected := time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)
 				assert.Equal(t, expected, result)
 			},
@@ -215,6 +205,7 @@ func TestDetermineSinceDate(t *testing.T) {
 			sinceDate: "",
 			wantErr:   false,
 			checkResult: func(t *testing.T, result time.Time) {
+				t.Helper()
 				now := time.Now()
 				expected := now.AddDate(0, 0, -30)
 				// Check that it's approximately 30 days ago (within 1 minute)
@@ -228,6 +219,7 @@ func TestDetermineSinceDate(t *testing.T) {
 			lastFetchDate: ptrTime(time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)),
 			wantErr:       false,
 			checkResult: func(t *testing.T, result time.Time) {
+				t.Helper()
 				expected := time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC)
 				assert.Equal(t, expected, result)
 			},
@@ -250,18 +242,18 @@ func TestDetermineSinceDate(t *testing.T) {
 	}
 }
 
-// TestFetchCommandOutput tests command output formatting
-func TestFetchCommandOutput(t *testing.T) {
+// TestCommandOutput tests command output formatting
+func TestCommandOutput(t *testing.T) {
 	configFile := "test-config.yaml"
-	cmd := NewFetchCmd(&configFile, nil, nil)
+	cobraCmd := NewFetchCmd(&configFile, nil, nil)
 
 	// Test help output
 	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
+	cobraCmd.SetOut(&buf)
+	cobraCmd.SetErr(&buf)
 
-	err := cmd.Help()
-	assert.NoError(t, err)
+	err := cobraCmd.Help()
+	require.NoError(t, err)
 	assert.NotEmpty(t, buf.String(), "should generate help text")
 }
 

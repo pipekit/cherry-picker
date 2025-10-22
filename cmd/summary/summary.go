@@ -1,6 +1,8 @@
+// Package summary implements the summary command for generating release notes from tracked commits.
 package summary
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 
@@ -9,15 +11,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// SummaryCommand encapsulates the summary command with common functionality
-type SummaryCommand struct {
+// command encapsulates the summary command with common functionality
+type command struct {
 	commands.BaseCommand
 	TargetBranch string
 }
 
 // NewSummaryCmd creates the summary command
 func NewSummaryCmd(globalConfigFile *string, loadConfig func(string) (*cmd.Config, error)) *cobra.Command {
-	summaryCmd := &SummaryCommand{}
+	summaryCmd := &command{}
 
 	cobraCmd := &cobra.Command{
 		Use:   "summary <target-branch>",
@@ -34,17 +36,17 @@ Examples:
   cherry-picker summary main           # Dev progress for main branch`,
 		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cobraCmd *cobra.Command, args []string) error {
 			summaryCmd.TargetBranch = args[0]
 
 			// Initialize base command (no save config needed for summary)
 			summaryCmd.ConfigFile = globalConfigFile
 			summaryCmd.LoadConfig = loadConfig
-			if err := summaryCmd.Init(); err != nil {
+			if err := summaryCmd.Init(cobraCmd.Context()); err != nil {
 				return err
 			}
 
-			return summaryCmd.Run()
+			return summaryCmd.Run(cobraCmd.Context())
 		},
 	}
 
@@ -52,7 +54,7 @@ Examples:
 }
 
 // Run executes the summary command
-func (sc *SummaryCommand) Run() error {
+func (sc *command) Run(ctx context.Context) error {
 	org := sc.Config.Org
 	repo := sc.Config.Repo
 
@@ -62,7 +64,7 @@ func (sc *SummaryCommand) Run() error {
 	slog.Info("Generating summary", "org", org, "repo", repo, "branch", sc.TargetBranch)
 
 	// Get the last release tag for this branch
-	lastTag, err := getLastReleaseTag(sc.GitHubClient, sc.TargetBranch)
+	lastTag, err := getLastReleaseTag(ctx, sc.GitHubClient, sc.TargetBranch)
 	if err != nil {
 		return fmt.Errorf("failed to get last release tag: %w", err)
 	}
@@ -74,7 +76,7 @@ func (sc *SummaryCommand) Run() error {
 	}
 
 	// Get commits since the last tag
-	commits, err := getCommitsSinceTag(sc.GitHubClient, sc.TargetBranch, lastTag)
+	commits, err := getCommitsSinceTag(ctx, sc.GitHubClient, sc.TargetBranch, lastTag)
 	if err != nil {
 		return fmt.Errorf("failed to get commits: %w", err)
 	}
@@ -83,7 +85,7 @@ func (sc *SummaryCommand) Run() error {
 	pickedPRs := getPickedPRs(sc.Config, sc.TargetBranch)
 
 	// Get open PRs targeting this branch
-	openPRs, err := sc.GitHubClient.GetOpenPRs(sc.TargetBranch)
+	openPRs, err := sc.GitHubClient.GetOpenPRs(ctx, sc.TargetBranch)
 	if err != nil {
 		return fmt.Errorf("failed to get open PRs: %w", err)
 	}

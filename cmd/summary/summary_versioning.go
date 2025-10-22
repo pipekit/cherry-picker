@@ -1,6 +1,7 @@
 package summary
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"sort"
@@ -11,9 +12,9 @@ import (
 )
 
 // getLastReleaseTag finds the most recent release tag for the given branch
-func getLastReleaseTag(client *github.Client, branch string) (string, error) {
+func getLastReleaseTag(ctx context.Context, client *github.Client, branch string) (string, error) {
 	// Get all tags from the repository
-	tags, err := client.ListTags()
+	tags, err := client.ListTags(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to list tags: %w", err)
 	}
@@ -25,8 +26,8 @@ func getLastReleaseTag(client *github.Client, branch string) (string, error) {
 
 	// Extract version prefix from branch name (e.g., "release-3.6" -> "3.6")
 	var versionPrefix string
-	if strings.HasPrefix(branch, "release-") {
-		versionPrefix = strings.TrimPrefix(branch, "release-")
+	if after, ok := strings.CutPrefix(branch, "release-"); ok {
+		versionPrefix = after
 	} else {
 		// For non-release branches, use the branch name as-is
 		versionPrefix = branch
@@ -90,6 +91,6 @@ func compareVersions(v1, v2 string) int {
 }
 
 // getCommitsSinceTag gets commits on the branch since the given tag
-func getCommitsSinceTag(client *github.Client, branch, sinceTag string) ([]github.Commit, error) {
-	return client.GetCommitsSince(branch, sinceTag)
+func getCommitsSinceTag(ctx context.Context, client *github.Client, branch, sinceTag string) ([]github.Commit, error) {
+	return client.GetCommitsSince(ctx, branch, sinceTag)
 }

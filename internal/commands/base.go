@@ -13,12 +13,11 @@ type BaseCommand struct {
 	LoadConfig   func(string) (*cmd.Config, error)
 	SaveConfig   func(string, *cmd.Config) error
 	GitHubClient *github.Client
-	Context      context.Context
 	Config       *cmd.Config
 }
 
 // Init initializes the base command with common setup
-func (bc *BaseCommand) Init() error {
+func (bc *BaseCommand) Init(ctx context.Context) error {
 	// Load configuration
 	config, err := bc.LoadConfig(*bc.ConfigFile)
 	if err != nil {
@@ -27,12 +26,11 @@ func (bc *BaseCommand) Init() error {
 	bc.Config = config
 
 	// Initialize GitHub client using common initialization function
-	client, ctx, err := InitializeGitHubClient(config)
+	client, _, err := InitializeGitHubClient(ctx, config)
 	if err != nil {
 		return err
 	}
 	bc.GitHubClient = client
-	bc.Context = ctx
 
 	return nil
 }

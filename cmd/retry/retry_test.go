@@ -3,7 +3,6 @@ package retry
 import (
 	"bytes"
 	"errors"
-	"os"
 	"testing"
 
 	"github.com/alan/cherry-picker/cmd"
@@ -18,78 +17,75 @@ func TestNewRetryCmd(t *testing.T) {
 		Repo: "test-repo",
 	}
 
-	loadConfig := func(path string) (*cmd.Config, error) {
+	loadConfig := func(_ string) (*cmd.Config, error) {
 		return mockConfig, nil
 	}
-	saveConfig := func(path string, config *cmd.Config) error {
+	saveConfig := func(_ string, _ *cmd.Config) error {
 		return nil
 	}
 
-	cmd := NewRetryCmd(loadConfig, saveConfig)
+	cobraCmd := NewRetryCmd(loadConfig, saveConfig)
 
-	assert.NotNil(t, cmd)
-	assert.NotEmpty(t, cmd.Use)
-	assert.NotEmpty(t, cmd.Short)
-	assert.NotEmpty(t, cmd.Long)
-	assert.NotNil(t, cmd.RunE)
-	assert.NoError(t, cmd.Args(cmd, []string{}))              // 0 args ok
-	assert.NoError(t, cmd.Args(cmd, []string{"1"}))           // 1 arg ok
-	assert.NoError(t, cmd.Args(cmd, []string{"1", "branch"})) // 2 args ok
-	assert.Error(t, cmd.Args(cmd, []string{"1", "2", "3"}))   // 3 args not ok
+	assert.NotNil(t, cobraCmd)
+	assert.NotEmpty(t, cobraCmd.Use)
+	assert.NotEmpty(t, cobraCmd.Short)
+	assert.NotEmpty(t, cobraCmd.Long)
+	assert.NotNil(t, cobraCmd.RunE)
+	assert.NoError(t, cobraCmd.Args(cobraCmd, []string{}))              // 0 args ok
+	assert.NoError(t, cobraCmd.Args(cobraCmd, []string{"1"}))           // 1 arg ok
+	assert.NoError(t, cobraCmd.Args(cobraCmd, []string{"1", "branch"})) // 2 args ok
+	assert.Error(t, cobraCmd.Args(cobraCmd, []string{"1", "2", "3"}))   // 3 args not ok
 }
 
 // TestRetryCmd_RunE_InvalidPRNumber tests error handling for invalid PR number
 func TestRetryCmd_RunE_InvalidPRNumber(t *testing.T) {
-	loadConfig := func(path string) (*cmd.Config, error) {
+	loadConfig := func(_ string) (*cmd.Config, error) {
 		return &cmd.Config{}, nil
 	}
-	saveConfig := func(path string, config *cmd.Config) error {
+	saveConfig := func(_ string, _ *cmd.Config) error {
 		return nil
 	}
 
-	cmd := NewRetryCmd(loadConfig, saveConfig)
+	cobraCmd := NewRetryCmd(loadConfig, saveConfig)
 
 	// Test with invalid PR number - should error
-	err := cmd.RunE(cmd, []string{"invalid"})
+	err := cobraCmd.RunE(cobraCmd, []string{"invalid"})
 	require.Error(t, err)
 }
 
 // TestRetryCmd_RunE_ConfigLoadError tests error when config fails to load
 func TestRetryCmd_RunE_ConfigLoadError(t *testing.T) {
-	loadConfig := func(path string) (*cmd.Config, error) {
+	t.Setenv("GITHUB_TOKEN", "test-token")
+
+	loadConfig := func(_ string) (*cmd.Config, error) {
 		return nil, errors.New("config load error")
 	}
-	saveConfig := func(path string, config *cmd.Config) error {
+	saveConfig := func(_ string, _ *cmd.Config) error {
 		return nil
 	}
 
-	// Temporarily set GITHUB_TOKEN to avoid that error
-	oldToken := os.Getenv("GITHUB_TOKEN")
-	os.Setenv("GITHUB_TOKEN", "test-token")
-	defer os.Setenv("GITHUB_TOKEN", oldToken)
+	cobraCmd := NewRetryCmd(loadConfig, saveConfig)
 
-	cmd := NewRetryCmd(loadConfig, saveConfig)
-
-	err := cmd.RunE(cmd, []string{})
+	err := cobraCmd.RunE(cobraCmd, []string{})
 	require.Error(t, err)
 }
 
-// TestRetryCommand_Run_PRNotFound tests when PR is not tracked
-func TestRetryCommand_Run_PRNotFound(t *testing.T) {
-	rc := &RetryCommand{
+// TestCommand_Run_PRNotFound tests when PR is not tracked
+func TestCommand_Run_PRNotFound(t *testing.T) {
+	rc := &command{
 		PRNumber: 999,
 	}
 	rc.Config = &cmd.Config{
 		TrackedPRs: []cmd.TrackedPR{},
 	}
 
-	err := rc.Run()
+	err := rc.Run(t.Context())
 	require.Error(t, err)
 }
 
-// TestRetryCommand_Run_NoPRsEligible tests when no PRs are eligible for retry
-func TestRetryCommand_Run_NoPRsEligible(t *testing.T) {
-	rc := &RetryCommand{
+// TestCommand_Run_NoPRsEligible tests when no PRs are eligible for retry
+func TestCommand_Run_NoPRsEligible(t *testing.T) {
+	rc := &command{
 		PRNumber: 123,
 	}
 	rc.Config = &cmd.Config{
@@ -105,13 +101,13 @@ func TestRetryCommand_Run_NoPRsEligible(t *testing.T) {
 		},
 	}
 
-	err := rc.Run()
+	err := rc.Run(t.Context())
 	require.Error(t, err)
 }
 
-// TestRetryCommand_Run_BranchNotEligible tests when specified branch is not eligible
-func TestRetryCommand_Run_BranchNotEligible(t *testing.T) {
-	rc := &RetryCommand{
+// TestCommand_Run_BranchNotEligible tests when specified branch is not eligible
+func TestCommand_Run_BranchNotEligible(t *testing.T) {
+	rc := &command{
 		PRNumber:     123,
 		TargetBranch: "release-1.0",
 	}
@@ -132,13 +128,13 @@ func TestRetryCommand_Run_BranchNotEligible(t *testing.T) {
 		},
 	}
 
-	err := rc.Run()
+	err := rc.Run(t.Context())
 	require.Error(t, err)
 }
 
-// TestRetryCommand_Run_BranchNotTracked tests when specified branch is not tracked
-func TestRetryCommand_Run_BranchNotTracked(t *testing.T) {
-	rc := &RetryCommand{
+// TestCommand_Run_BranchNotTracked tests when specified branch is not tracked
+func TestCommand_Run_BranchNotTracked(t *testing.T) {
+	rc := &command{
 		PRNumber:     123,
 		TargetBranch: "release-2.0",
 	}
@@ -159,12 +155,12 @@ func TestRetryCommand_Run_BranchNotTracked(t *testing.T) {
 		},
 	}
 
-	err := rc.Run()
+	err := rc.Run(t.Context())
 	require.Error(t, err)
 }
 
-// TestRetryCommand_RetriesCorrectPR tests that the retry targets the cherry-pick PR
-func TestRetryCommand_RetriesCorrectPR(t *testing.T) {
+// TestCommand_RetriesCorrectPR tests that the retry targets the cherry-pick PR
+func TestCommand_RetriesCorrectPR(t *testing.T) {
 	// This test verifies the critical invariant that we retry the cherry-pick PR,
 	// not the original PR
 	config := &cmd.Config{
@@ -184,7 +180,7 @@ func TestRetryCommand_RetriesCorrectPR(t *testing.T) {
 		},
 	}
 
-	rc := &RetryCommand{
+	rc := &command{
 		PRNumber:     123,
 		TargetBranch: "release-1.0",
 	}
@@ -196,34 +192,34 @@ func TestRetryCommand_RetriesCorrectPR(t *testing.T) {
 	assert.Equal(t, 456, branchStatus.PR.Number, "should target cherry-pick PR, not original")
 }
 
-// TestRetryCommandFlags tests that the command has the expected flags
-func TestRetryCommandFlags(t *testing.T) {
-	cmd := NewRetryCmd(nil, nil)
+// TestCommandFlags tests that the command has the expected flags
+func TestCommandFlags(t *testing.T) {
+	cobraCmd := NewRetryCmd(nil, nil)
 
 	// Check that the config flag exists
-	configFlag := cmd.Flags().Lookup("config")
+	configFlag := cobraCmd.Flags().Lookup("config")
 	assert.NotNil(t, configFlag)
 	assert.Equal(t, "cherry-picks.yaml", configFlag.DefValue)
 	assert.Equal(t, "Path to configuration file", configFlag.Usage)
 }
 
-// TestRetryCommandOutput tests command output formatting
-func TestRetryCommandOutput(t *testing.T) {
-	cmd := NewRetryCmd(nil, nil)
+// TestCommandOutput tests command output formatting
+func TestCommandOutput(t *testing.T) {
+	cobraCmd := NewRetryCmd(nil, nil)
 
 	// Test help output
 	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
+	cobraCmd.SetOut(&buf)
+	cobraCmd.SetErr(&buf)
 
 	// Just check that help can be generated without errors
-	err := cmd.Help()
-	assert.NoError(t, err)
+	err := cobraCmd.Help()
+	require.NoError(t, err)
 	assert.NotEmpty(t, buf.String(), "should generate help text")
 }
 
-// TestRetryCommand_DoesNotModifyConfig tests that retry doesn't change config
-func TestRetryCommand_DoesNotModifyConfig(t *testing.T) {
+// TestCommand_DoesNotModifyConfig tests that retry doesn't change config
+func TestCommand_DoesNotModifyConfig(t *testing.T) {
 	// Retry should not modify the config, unlike merge which updates status
 	config := &cmd.Config{
 		TrackedPRs: []cmd.TrackedPR{
@@ -245,7 +241,7 @@ func TestRetryCommand_DoesNotModifyConfig(t *testing.T) {
 	originalStatus := config.TrackedPRs[0].Branches["release-1.0"].Status
 	originalCIStatus := config.TrackedPRs[0].Branches["release-1.0"].PR.CIStatus
 
-	rc := &RetryCommand{
+	rc := &command{
 		PRNumber:     123,
 		TargetBranch: "release-1.0",
 	}

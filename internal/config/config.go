@@ -1,3 +1,4 @@
+// Package config provides functions for loading and saving cherry-picker configuration files.
 package config
 
 import (
@@ -10,7 +11,7 @@ import (
 
 // LoadConfig loads the configuration from the specified file
 func LoadConfig(filename string) (*cmd.Config, error) {
-	data, err := os.ReadFile(filename)
+	data, err := os.ReadFile(filename) //nolint:gosec // Config filename is from command-line flag
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
@@ -30,7 +31,7 @@ func SaveConfig(filename string, config *cmd.Config) error {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	if err := os.WriteFile(filename, data, 0644); err != nil {
+	if err := os.WriteFile(filename, data, 0600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 

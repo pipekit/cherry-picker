@@ -1,4 +1,4 @@
-.PHONY: test test-integration test-all clean fmt vet check all
+.PHONY: test test-integration test-all clean fmt vet check all lint modernize
 
 # Find all Go source files
 GO_FILES := $(shell find . -name '*.go' -type f)
@@ -40,7 +40,16 @@ vet:
 	go vet ./...
 
 # Run all checks (unit tests only for speed)
-check: fmt vet test
+check: fmt vet test lint modernize
 
 # Default target
 all: check build
+
+lint: modernize fmt
+	golangci-lint run \
+		--config=.golangci.yaml \
+		--timeout=5m \
+	    ./...
+
+modernize:
+	modernize ./...

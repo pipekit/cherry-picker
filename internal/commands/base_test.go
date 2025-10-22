@@ -2,7 +2,6 @@ package commands
 
 import (
 	"errors"
-	"os"
 	"testing"
 
 	"github.com/alan/cherry-picker/cmd"
@@ -13,24 +12,14 @@ import (
 func TestBaseCommand_Init(t *testing.T) {
 	tests := []struct {
 		name       string
-		setupEnv   func() (cleanup func())
+		token      string
 		loadConfig func(string) (*cmd.Config, error)
 		wantErr    bool
 	}{
 		{
-			name: "successful init",
-			setupEnv: func() func() {
-				oldToken := os.Getenv("GITHUB_TOKEN")
-				os.Setenv("GITHUB_TOKEN", "test-token")
-				return func() {
-					if oldToken != "" {
-						os.Setenv("GITHUB_TOKEN", oldToken)
-					} else {
-						os.Unsetenv("GITHUB_TOKEN")
-					}
-				}
-			},
-			loadConfig: func(path string) (*cmd.Config, error) {
+			name:  "successful init",
+			token: "test-token",
+			loadConfig: func(_ string) (*cmd.Config, error) {
 				return &cmd.Config{
 					Org:  "testorg",
 					Repo: "testrepo",
@@ -39,35 +28,17 @@ func TestBaseCommand_Init(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "config load error",
-			setupEnv: func() func() {
-				oldToken := os.Getenv("GITHUB_TOKEN")
-				os.Setenv("GITHUB_TOKEN", "test-token")
-				return func() {
-					if oldToken != "" {
-						os.Setenv("GITHUB_TOKEN", oldToken)
-					} else {
-						os.Unsetenv("GITHUB_TOKEN")
-					}
-				}
-			},
-			loadConfig: func(path string) (*cmd.Config, error) {
+			name:  "config load error",
+			token: "test-token",
+			loadConfig: func(_ string) (*cmd.Config, error) {
 				return nil, errors.New("failed to load config")
 			},
 			wantErr: true,
 		},
 		{
-			name: "missing github token",
-			setupEnv: func() func() {
-				oldToken := os.Getenv("GITHUB_TOKEN")
-				os.Unsetenv("GITHUB_TOKEN")
-				return func() {
-					if oldToken != "" {
-						os.Setenv("GITHUB_TOKEN", oldToken)
-					}
-				}
-			},
-			loadConfig: func(path string) (*cmd.Config, error) {
+			name:  "missing github token",
+			token: "",
+			loadConfig: func(_ string) (*cmd.Config, error) {
 				return &cmd.Config{
 					Org:  "testorg",
 					Repo: "testrepo",
@@ -79,8 +50,7 @@ func TestBaseCommand_Init(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cleanup := tt.setupEnv()
-			defer cleanup()
+			t.Setenv("GITHUB_TOKEN", tt.token)
 
 			configFile := "test-config.yaml"
 			bc := &BaseCommand{
@@ -88,7 +58,7 @@ func TestBaseCommand_Init(t *testing.T) {
 				LoadConfig: tt.loadConfig,
 			}
 
-			err := bc.Init()
+			err := bc.Init(t.Context())
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -96,22 +66,13 @@ func TestBaseCommand_Init(t *testing.T) {
 				require.NoError(t, err)
 				assert.NotNil(t, bc.Config)
 				assert.NotNil(t, bc.GitHubClient)
-				assert.NotNil(t, bc.Context)
 			}
 		})
 	}
 }
 
 func TestBaseCommand_InitSetsFields(t *testing.T) {
-	oldToken := os.Getenv("GITHUB_TOKEN")
-	os.Setenv("GITHUB_TOKEN", "test-token")
-	defer func() {
-		if oldToken != "" {
-			os.Setenv("GITHUB_TOKEN", oldToken)
-		} else {
-			os.Unsetenv("GITHUB_TOKEN")
-		}
-	}()
+	t.Setenv("GITHUB_TOKEN", "test-token")
 
 	expectedConfig := &cmd.Config{
 		Org:  "myorg",
@@ -121,12 +82,12 @@ func TestBaseCommand_InitSetsFields(t *testing.T) {
 	configFile := "test-config.yaml"
 	bc := &BaseCommand{
 		ConfigFile: &configFile,
-		LoadConfig: func(path string) (*cmd.Config, error) {
+		LoadConfig: func(_ string) (*cmd.Config, error) {
 			return expectedConfig, nil
 		},
 	}
 
-	err := bc.Init()
+	err := bc.Init(t.Context())
 
 	require.NoError(t, err)
 	assert.Equal(t, expectedConfig, bc.Config)

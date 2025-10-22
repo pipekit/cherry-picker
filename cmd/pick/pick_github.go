@@ -1,6 +1,7 @@
 package pick
 
 import (
+	"context"
 	"fmt"
 	"strings"
 )
@@ -13,8 +14,8 @@ type CherryPickResult struct {
 }
 
 // getCommitSHA retrieves the merge commit SHA for a PR
-func (pc *PickCommand) getCommitSHA(prNumber int) (string, error) {
-	pr, err := pc.GitHubClient.GetPR(prNumber)
+func (pc *command) getCommitSHA(ctx context.Context, prNumber int) (string, error) {
+	pr, err := pc.GitHubClient.GetPR(ctx, prNumber)
 	if err != nil {
 		return "", fmt.Errorf("failed to get PR details: %w", err)
 	}
@@ -27,7 +28,7 @@ func (pc *PickCommand) getCommitSHA(prNumber int) (string, error) {
 }
 
 // createCherryPickPR creates a PR for the cherry-pick using bot-style formatting
-func (pc *PickCommand) createCherryPickPR(headBranch, baseBranch string, originalPRNumber int, originalTitle string) (int, error) {
+func (pc *command) createCherryPickPR(ctx context.Context, headBranch, baseBranch string, originalPRNumber int, originalTitle string) (int, error) {
 	// Extract version from branch name (e.g., "release-3.7" -> "3.7")
 	version := strings.TrimPrefix(baseBranch, "release-")
 
@@ -37,7 +38,7 @@ func (pc *PickCommand) createCherryPickPR(headBranch, baseBranch string, origina
 	// Body format matches bot: "Cherry-picked <original-title> (#<pr>)"
 	prDescription := fmt.Sprintf("Cherry-picked %s (#%d)", originalTitle, originalPRNumber)
 
-	prNumber, err := pc.GitHubClient.CreatePR(prTitle, prDescription, headBranch, baseBranch)
+	prNumber, err := pc.GitHubClient.CreatePR(ctx, prTitle, prDescription, headBranch, baseBranch)
 	if err != nil {
 		return 0, fmt.Errorf("GitHub API error creating PR from %s to %s: %w", headBranch, baseBranch, err)
 	}

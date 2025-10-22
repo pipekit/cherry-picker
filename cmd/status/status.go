@@ -1,3 +1,4 @@
+// Package status implements the status command for displaying tracked PRs and their cherry-pick status.
 package status
 
 import (
@@ -11,17 +12,17 @@ import (
 
 // NewStatusCmd creates and returns the status command
 func NewStatusCmd(globalConfigFile *string, loadConfig func(string) (*cmd.Config, error)) *cobra.Command {
-	cmd := &cobra.Command{
+	statusCmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show status of tracked PRs across target branches",
 		Long: `Display the current status of all tracked PRs.
 Shows which PRs are pending, picked, or merged for each target branch.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return runStatus(*globalConfigFile, loadConfig)
 		},
 	}
 
-	return cmd
+	return statusCmd
 }
 
 func runStatus(configFile string, loadConfig func(string) (*cmd.Config, error)) error {
@@ -118,22 +119,22 @@ type ciStatusInfo struct {
 // getCIStatusInfo returns display information for a given CI status
 func getCIStatusInfo(ciStatus cmd.CIStatus, executablePath, configFlag string, prNumber int, branch string) ciStatusInfo {
 	switch ciStatus {
-	case "passing":
+	case cmd.CIStatusPassing:
 		return ciStatusInfo{
 			indicator:        "✅ CI passing",
 			suggestedCommand: fmt.Sprintf("%s%s merge %d %s", executablePath, configFlag, prNumber, branch),
 		}
-	case "failing":
+	case cmd.CIStatusFailing:
 		return ciStatusInfo{
 			indicator:        "❌ CI failing",
 			suggestedCommand: fmt.Sprintf("%s%s retry %d %s", executablePath, configFlag, prNumber, branch),
 		}
-	case "pending":
+	case cmd.CIStatusPending:
 		return ciStatusInfo{
 			indicator:        "🔄 CI pending",
 			suggestedCommand: "", // No action needed while CI is running
 		}
-	case "unknown":
+	case cmd.CIStatusUnknown:
 		return ciStatusInfo{
 			indicator:        "❓ CI unknown",
 			suggestedCommand: "",
@@ -152,13 +153,13 @@ func displayBranchStatus(branch string, status cmd.BranchStatus, config *cmd.Con
 	configFlag := getConfigFlag(configFile)
 
 	switch status.Status {
-	case "pending":
+	case cmd.BranchStatusPending:
 		fmt.Printf("  %-15s: ⏳ pending (bot hasn't attempted)\n", branch)
-	case "failed":
+	case cmd.BranchStatusFailed:
 		fmt.Printf("  %-15s: ❌ failed (bot couldn't cherry-pick)\n", branch)
 		// Show pick command for AI-assisted resolution
 		fmt.Printf("  %-15s  💡 %s%s pick %d %s\n", "", executablePath, configFlag, prNumber, branch)
-	case "picked":
+	case cmd.BranchStatusPicked:
 		if status.PR != nil {
 			prURL := fmt.Sprintf("https://github.com/%s/%s/pull/%d", config.Org, config.Repo, status.PR.Number)
 			fmt.Printf("  %-15s: 🔄 picked (%s)\n", branch, prURL)
@@ -179,7 +180,7 @@ func displayBranchStatus(branch string, status cmd.BranchStatus, config *cmd.Con
 		} else {
 			fmt.Printf("  %-15s: ✅ picked\n", branch)
 		}
-	case "merged":
+	case cmd.BranchStatusMerged:
 		fmt.Printf("  %-15s: ✅ merged\n", branch)
 	default:
 		fmt.Printf("  %-15s: ❓ unknown status: %s\n", branch, status.Status)
@@ -195,13 +196,13 @@ func displayStatusSummary(prs []cmd.TrackedPR) {
 	for _, pr := range prs {
 		for _, status := range pr.Branches {
 			switch status.Status {
-			case "pending":
+			case cmd.BranchStatusPending:
 				totalPending++
-			case "failed":
+			case cmd.BranchStatusFailed:
 				totalFailed++
-			case "picked":
+			case cmd.BranchStatusPicked:
 				totalPicked++
-			case "merged":
+			case cmd.BranchStatusMerged:
 				totalMerged++
 			}
 		}

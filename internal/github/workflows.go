@@ -1,15 +1,16 @@
 package github
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/google/go-github/v57/github"
 )
 
 // RetryFailedWorkflows retries all failed workflow runs for a PR
-func (c *Client) RetryFailedWorkflows(prNumber int) error {
+func (c *Client) RetryFailedWorkflows(ctx context.Context, prNumber int) error {
 	// Get the PR to find its head SHA
-	pr, _, err := c.client.PullRequests.Get(c.ctx, c.org, c.repo, prNumber)
+	pr, _, err := c.client.PullRequests.Get(ctx, c.org, c.repo, prNumber)
 	if err != nil {
 		return fmt.Errorf("failed to get PR #%d: %w", prNumber, err)
 	}
@@ -17,7 +18,7 @@ func (c *Client) RetryFailedWorkflows(prNumber int) error {
 	headSHA := pr.GetHead().GetSHA()
 
 	// Get workflow runs for the PR's head commit
-	workflowRuns, err := c.getWorkflowRunsForCommit(headSHA)
+	workflowRuns, err := c.getWorkflowRunsForCommit(ctx, headSHA)
 	if err != nil {
 		return fmt.Errorf("failed to get workflow runs for commit %s: %w", headSHA, err)
 	}
@@ -36,7 +37,7 @@ func (c *Client) RetryFailedWorkflows(prNumber int) error {
 			continue
 		}
 
-		err := c.retryWorkflowRun(run.GetID())
+		err := c.retryWorkflowRun(ctx, run.GetID())
 		if err != nil {
 			errors = append(errors, fmt.Errorf("failed to retry workflow run %d: %w", run.GetID(), err))
 			continue
@@ -60,7 +61,7 @@ func (c *Client) RetryFailedWorkflows(prNumber int) error {
 }
 
 // getWorkflowRunsForCommit gets all workflow runs for a specific commit
-func (c *Client) getWorkflowRunsForCommit(sha string) ([]*github.WorkflowRun, error) {
+func (c *Client) getWorkflowRunsForCommit(ctx context.Context, sha string) ([]*github.WorkflowRun, error) {
 	// List workflow runs for the repository, filtered by head_sha
 	opts := &github.ListWorkflowRunsOptions{
 		HeadSHA: sha,
@@ -69,7 +70,7 @@ func (c *Client) getWorkflowRunsForCommit(sha string) ([]*github.WorkflowRun, er
 		},
 	}
 
-	runs, _, err := c.client.Actions.ListRepositoryWorkflowRuns(c.ctx, c.org, c.repo, opts)
+	runs, _, err := c.client.Actions.ListRepositoryWorkflowRuns(ctx, c.org, c.repo, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -78,12 +79,12 @@ func (c *Client) getWorkflowRunsForCommit(sha string) ([]*github.WorkflowRun, er
 }
 
 // retryWorkflowRun retries a specific workflow run by re-running failed jobs
-func (c *Client) retryWorkflowRun(runID int64) error {
+func (c *Client) retryWorkflowRun(ctx context.Context, runID int64) error {
 	// Try to re-run failed jobs first (more targeted approach)
-	_, err := c.client.Actions.RerunFailedJobsByID(c.ctx, c.org, c.repo, runID)
+	_, err := c.client.Actions.RerunFailedJobsByID(ctx, c.org, c.repo, runID)
 	if err != nil {
 		// If re-running failed jobs doesn't work, try re-running the entire workflow
-		_, retryErr := c.client.Actions.RerunWorkflowByID(c.ctx, c.org, c.repo, runID)
+		_, retryErr := c.client.Actions.RerunWorkflowByID(ctx, c.org, c.repo, runID)
 		if retryErr != nil {
 			return fmt.Errorf("failed to retry workflow run (tried both failed jobs and full rerun): %w (original: %v)", retryErr, err)
 		}
@@ -93,9 +94,9 @@ func (c *Client) retryWorkflowRun(runID int64) error {
 }
 
 // MergePR merges a pull request using the specified merge method
-func (c *Client) MergePR(prNumber int, mergeMethod string) error {
+func (c *Client) MergePR(ctx context.Context, prNumber int, mergeMethod string) error {
 	// Get the PR to find its head SHA for merge validation
-	pr, _, err := c.client.PullRequests.Get(c.ctx, c.org, c.repo, prNumber)
+	pr, _, err := c.client.PullRequests.Get(ctx, c.org, c.repo, prNumber)
 	if err != nil {
 		return fmt.Errorf("failed to get PR #%d: %w", prNumber, err)
 	}
@@ -113,7 +114,7 @@ func (c *Client) MergePR(prNumber int, mergeMethod string) error {
 	}
 
 	// Perform the merge
-	mergeResult, _, err := c.client.PullRequests.Merge(c.ctx, c.org, c.repo, prNumber, "", mergeOptions)
+	mergeResult, _, err := c.client.PullRequests.Merge(ctx, c.org, c.repo, prNumber, "", mergeOptions)
 	if err != nil {
 		return fmt.Errorf("failed to merge PR #%d: %w", prNumber, err)
 	}

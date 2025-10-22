@@ -1,3 +1,4 @@
+// Package github provides a client for interacting with the GitHub API for PR and workflow operations.
 package github
 
 import (
@@ -10,7 +11,6 @@ import (
 // Client wraps the GitHub API client with repository context
 type Client struct {
 	client *github.Client
-	ctx    context.Context
 	org    string
 	repo   string
 }
@@ -47,7 +47,6 @@ func NewClient(ctx context.Context, token string) *Client {
 
 	return &Client{
 		client: github.NewClient(tc),
-		ctx:    ctx,
 	}
 }
 
@@ -55,7 +54,6 @@ func NewClient(ctx context.Context, token string) *Client {
 func (c *Client) WithRepository(org, repo string) *Client {
 	return &Client{
 		client: c.client,
-		ctx:    c.ctx,
 		org:    org,
 		repo:   repo,
 	}

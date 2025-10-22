@@ -11,31 +11,31 @@ import (
 
 func TestNewStatusCmd(t *testing.T) {
 	// Mock function
-	loadConfig := func(filename string) (*cmd.Config, error) {
+	loadConfig := func(_ string) (*cmd.Config, error) {
 		return nil, nil
 	}
 
 	configFile := "test-config.yaml"
-	cmd := NewStatusCmd(&configFile, loadConfig)
+	cobraCmd := NewStatusCmd(&configFile, loadConfig)
 
 	// Test command properties
-	if cmd.Use != "status" {
-		t.Errorf("NewStatusCmd() Use = %v, want %v", cmd.Use, "status")
+	if cobraCmd.Use != "status" {
+		t.Errorf("NewStatusCmd() Use = %v, want %v", cobraCmd.Use, "status")
 	}
 
-	if cmd.Short != "Show status of tracked PRs across target branches" {
-		t.Errorf("NewStatusCmd() Short = %v, want expected short description", cmd.Short)
+	if cobraCmd.Short != "Show status of tracked PRs across target branches" {
+		t.Errorf("NewStatusCmd() Short = %v, want expected short description", cobraCmd.Short)
 	}
 
 	// Test that no local flags are added (should only use global config)
-	flags := cmd.Flags()
+	flags := cobraCmd.Flags()
 	if flags.NFlag() != 0 {
 		t.Errorf("NewStatusCmd() should have no local flags, got %d", flags.NFlag())
 	}
 }
 
 func TestRunStatus_NoConfig(t *testing.T) {
-	loadConfig := func(filename string) (*cmd.Config, error) {
+	loadConfig := func(_ string) (*cmd.Config, error) {
 		return nil, fmt.Errorf("config not found")
 	}
 
@@ -51,7 +51,7 @@ func TestRunStatus_NoConfig(t *testing.T) {
 }
 
 func TestRunStatus_NoPRs(t *testing.T) {
-	loadConfig := func(filename string) (*cmd.Config, error) {
+	loadConfig := func(_ string) (*cmd.Config, error) {
 		return &cmd.Config{
 			Org:                "testorg",
 			AIAssistantCommand: "cursor-agent",
@@ -72,7 +72,7 @@ func TestRunStatus_NoPRs(t *testing.T) {
 
 func TestRunStatus_WithActivePRs(t *testing.T) {
 	now := time.Now()
-	loadConfig := func(filename string) (*cmd.Config, error) {
+	loadConfig := func(_ string) (*cmd.Config, error) {
 		return &cmd.Config{
 			Org:                "testorg",
 			Repo:               "testrepo",
@@ -111,7 +111,7 @@ func TestRunStatus_WithActivePRs(t *testing.T) {
 }
 
 func TestRunStatus_EmptyConfig(t *testing.T) {
-	loadConfig := func(filename string) (*cmd.Config, error) {
+	loadConfig := func(_ string) (*cmd.Config, error) {
 		return &cmd.Config{
 			Org:                "testorg",
 			AIAssistantCommand: "cursor-agent",
@@ -129,7 +129,7 @@ func TestRunStatus_EmptyConfig(t *testing.T) {
 }
 
 func TestRunStatus_PRsWithoutBranches(t *testing.T) {
-	loadConfig := func(filename string) (*cmd.Config, error) {
+	loadConfig := func(_ string) (*cmd.Config, error) {
 		return &cmd.Config{
 			Org:                "testorg",
 			AIAssistantCommand: "cursor-agent",

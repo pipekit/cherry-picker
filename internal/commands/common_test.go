@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"os"
 	"testing"
 
 	"github.com/alan/cherry-picker/cmd"
@@ -11,24 +10,14 @@ import (
 
 func TestInitializeGitHubClient(t *testing.T) {
 	tests := []struct {
-		name       string
-		setupToken func() (cleanup func())
-		config     *cmd.Config
-		wantErr    bool
+		name    string
+		token   string
+		config  *cmd.Config
+		wantErr bool
 	}{
 		{
-			name: "successful initialization",
-			setupToken: func() func() {
-				oldToken := os.Getenv("GITHUB_TOKEN")
-				os.Setenv("GITHUB_TOKEN", "test-token")
-				return func() {
-					if oldToken != "" {
-						os.Setenv("GITHUB_TOKEN", oldToken)
-					} else {
-						os.Unsetenv("GITHUB_TOKEN")
-					}
-				}
-			},
+			name:  "successful initialization",
+			token: "test-token",
 			config: &cmd.Config{
 				Org:  "testorg",
 				Repo: "testrepo",
@@ -36,16 +25,8 @@ func TestInitializeGitHubClient(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "missing GITHUB_TOKEN",
-			setupToken: func() func() {
-				oldToken := os.Getenv("GITHUB_TOKEN")
-				os.Unsetenv("GITHUB_TOKEN")
-				return func() {
-					if oldToken != "" {
-						os.Setenv("GITHUB_TOKEN", oldToken)
-					}
-				}
-			},
+			name:  "missing GITHUB_TOKEN",
+			token: "",
 			config: &cmd.Config{
 				Org:  "testorg",
 				Repo: "testrepo",
@@ -53,18 +34,8 @@ func TestInitializeGitHubClient(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "empty org and repo",
-			setupToken: func() func() {
-				oldToken := os.Getenv("GITHUB_TOKEN")
-				os.Setenv("GITHUB_TOKEN", "test-token")
-				return func() {
-					if oldToken != "" {
-						os.Setenv("GITHUB_TOKEN", oldToken)
-					} else {
-						os.Unsetenv("GITHUB_TOKEN")
-					}
-				}
-			},
+			name:  "empty org and repo",
+			token: "test-token",
 			config: &cmd.Config{
 				Org:  "",
 				Repo: "",
@@ -75,10 +46,9 @@ func TestInitializeGitHubClient(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cleanup := tt.setupToken()
-			defer cleanup()
+			t.Setenv("GITHUB_TOKEN", tt.token)
 
-			client, ctx, err := InitializeGitHubClient(tt.config)
+			client, ctx, err := InitializeGitHubClient(t.Context(), tt.config)
 
 			if tt.wantErr {
 				require.Error(t, err)

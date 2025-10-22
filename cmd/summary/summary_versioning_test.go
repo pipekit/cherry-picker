@@ -3,8 +3,6 @@ package summary
 import (
 	"fmt"
 	"testing"
-
-	"github.com/alan/cherry-picker/internal/github"
 )
 
 func TestIncrementPatchVersion(t *testing.T) {
@@ -117,18 +115,16 @@ func TestCompareVersions(t *testing.T) {
 
 func TestGetLastReleaseTag(t *testing.T) {
 	tests := []struct {
-		name        string
-		branch      string
-		tags        []string
-		expected    string
-		expectError bool
+		name     string
+		branch   string
+		tags     []string
+		expected string
 	}{
 		{
-			name:        "no tags returns v0.0.0",
-			branch:      "release-3.6",
-			tags:        []string{},
-			expected:    "v0.0.0",
-			expectError: false,
+			name:     "no tags returns v0.0.0",
+			branch:   "release-3.6",
+			tags:     []string{},
+			expected: "v0.0.0",
 		},
 		{
 			name:     "single matching tag",
@@ -182,41 +178,19 @@ func TestGetLastReleaseTag(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a mock GitHub client
-			mockClient := &github.Client{}
-
-			// Mock the ListTags method behavior
-			originalListTags := func() ([]string, error) {
-				if tt.expectError {
-					return nil, fmt.Errorf("mock error")
-				}
-				return tt.tags, nil
-			}
-
-			// Call the function with a mock that returns our test tags
-			// We need to create a test double for the client
-			got, err := getLastReleaseTagWithTags(tt.tags, tt.branch)
-
-			if (err != nil) != tt.expectError {
-				t.Errorf("getLastReleaseTag() error = %v, expectError %v", err, tt.expectError)
-				return
-			}
+			got := getLastReleaseTagWithTags(tt.tags, tt.branch)
 
 			if got != tt.expected {
 				t.Errorf("getLastReleaseTag() = %v, want %v", got, tt.expected)
 			}
-
-			// Avoid unused variable error
-			_ = mockClient
-			_ = originalListTags
 		})
 	}
 }
 
 // Helper function for testing that doesn't require GitHub client
-func getLastReleaseTagWithTags(tags []string, branch string) (string, error) {
+func getLastReleaseTagWithTags(tags []string, branch string) string {
 	if len(tags) == 0 {
-		return "v0.0.0", nil
+		return "v0.0.0"
 	}
 
 	// Extract version prefix from branch name (e.g., "release-3.6" -> "3.6")
@@ -248,7 +222,7 @@ func getLastReleaseTagWithTags(tags []string, branch string) (string, error) {
 	}
 
 	if len(validTags) == 0 {
-		return fmt.Sprintf("v%s.0", versionPrefix), nil
+		return fmt.Sprintf("v%s.0", versionPrefix)
 	}
 
 	// Find the highest version
@@ -259,7 +233,7 @@ func getLastReleaseTagWithTags(tags []string, branch string) (string, error) {
 		}
 	}
 
-	return highest, nil
+	return highest
 }
 
 func isSemverTag(tag string) bool {
@@ -310,14 +284,11 @@ func splitVersion(version string) []string {
 func TestGetCommitsSinceTag(t *testing.T) {
 	// This is a simple wrapper function that delegates to the GitHub client
 	// We test it by verifying the function signature and that it exists
-	t.Run("function exists with correct signature", func(t *testing.T) {
+	t.Run("function exists with correct signature", func(_ *testing.T) {
 		// Verify the function signature by assigning it to a variable
-		var fn func(*github.Client, string, string) ([]github.Commit, error) = getCommitsSinceTag
+		var fn = getCommitsSinceTag
 
-		// Just verify it's not nil
-		if fn == nil {
-			t.Error("getCommitsSinceTag function should exist")
-		}
+		// Verify we can reference it
+		_ = fn
 	})
 }
-
