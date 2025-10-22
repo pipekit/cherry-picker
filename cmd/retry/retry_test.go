@@ -32,10 +32,10 @@ func TestNewRetryCmd(t *testing.T) {
 	assert.NotEmpty(t, cmd.Short)
 	assert.NotEmpty(t, cmd.Long)
 	assert.NotNil(t, cmd.RunE)
-	assert.NoError(t, cmd.Args(cmd, []string{}))    // 0 args ok
-	assert.NoError(t, cmd.Args(cmd, []string{"1"})) // 1 arg ok
+	assert.NoError(t, cmd.Args(cmd, []string{}))              // 0 args ok
+	assert.NoError(t, cmd.Args(cmd, []string{"1"}))           // 1 arg ok
 	assert.NoError(t, cmd.Args(cmd, []string{"1", "branch"})) // 2 args ok
-	assert.Error(t, cmd.Args(cmd, []string{"1", "2", "3"})) // 3 args not ok
+	assert.Error(t, cmd.Args(cmd, []string{"1", "2", "3"}))   // 3 args not ok
 }
 
 // TestRetryCmd_RunE_InvalidPRNumber tests error handling for invalid PR number

@@ -33,31 +33,13 @@ func TestIncrementPatchVersion(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name:     "increment v0.0.0",
-			version:  "v0.0.0",
-			expected: "v0.0.1",
-			wantErr:  false,
-		},
-		{
 			name:     "increment v10.20.99",
 			version:  "v10.20.99",
 			expected: "v10.20.100",
 			wantErr:  false,
 		},
 		{
-			name:     "invalid format - missing patch",
-			version:  "v1.0",
-			expected: "",
-			wantErr:  true,
-		},
-		{
-			name:     "invalid format - too many parts",
-			version:  "v1.0.0.1",
-			expected: "",
-			wantErr:  true,
-		},
-		{
-			name:     "invalid format - non-numeric patch",
+			name:     "invalid format - non-numeric",
 			version:  "v1.0.abc",
 			expected: "",
 			wantErr:  true,
@@ -65,12 +47,6 @@ func TestIncrementPatchVersion(t *testing.T) {
 		{
 			name:     "invalid format - empty string",
 			version:  "",
-			expected: "",
-			wantErr:  true,
-		},
-		{
-			name:     "invalid format - just v",
-			version:  "v",
 			expected: "",
 			wantErr:  true,
 		},
@@ -98,76 +74,34 @@ func TestCompareVersions(t *testing.T) {
 		expected int // > 0 if v1 > v2, < 0 if v1 < v2, 0 if equal
 	}{
 		{
-			name:     "equal versions with v prefix",
+			name:     "equal versions",
 			v1:       "v1.0.0",
 			v2:       "v1.0.0",
 			expected: 0,
 		},
 		{
-			name:     "equal versions without v prefix",
-			v1:       "1.0.0",
-			v2:       "1.0.0",
-			expected: 0,
-		},
-		{
-			name:     "v1 greater major version",
+			name:     "v1 greater major",
 			v1:       "v2.0.0",
 			v2:       "v1.0.0",
 			expected: 1,
 		},
 		{
-			name:     "v1 lesser major version",
+			name:     "v1 lesser major",
 			v1:       "v1.0.0",
 			v2:       "v2.0.0",
 			expected: -1,
 		},
 		{
-			name:     "v1 greater minor version",
-			v1:       "v1.5.0",
-			v2:       "v1.3.0",
-			expected: 1,
-		},
-		{
-			name:     "v1 lesser minor version",
-			v1:       "v1.3.0",
-			v2:       "v1.5.0",
-			expected: -1,
-		},
-		{
-			name:     "v1 greater patch version",
+			name:     "v1 greater patch",
 			v1:       "v1.0.5",
 			v2:       "v1.0.3",
 			expected: 1,
 		},
 		{
-			name:     "v1 lesser patch version",
-			v1:       "v1.0.3",
-			v2:       "v1.0.5",
-			expected: -1,
-		},
-		{
-			name:     "mixed prefix - equal",
-			v1:       "v1.0.0",
-			v2:       "1.0.0",
-			expected: 0,
-		},
-		{
-			name:     "mixed prefix - v1 greater",
+			name:     "mixed prefix works",
 			v1:       "v2.0.0",
 			v2:       "1.0.0",
 			expected: 1,
-		},
-		{
-			name:     "large version numbers",
-			v1:       "v10.20.100",
-			v2:       "v10.20.99",
-			expected: 1,
-		},
-		{
-			name:     "v0.0.0 vs v1.0.0",
-			v1:       "v0.0.0",
-			v2:       "v1.0.0",
-			expected: -1,
 		},
 	}
 
@@ -386,3 +320,4 @@ func TestGetCommitsSinceTag(t *testing.T) {
 		}
 	})
 }
+

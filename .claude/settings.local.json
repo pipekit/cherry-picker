@@ -15,7 +15,8 @@
       "Bash(do echo \"=== $dir ===\")",
       "Bash(ls:*)",
       "Bash(done)",
-      "Bash(go mod:*)"
+      "Bash(go mod:*)",
+      "Bash(go get:*)"
     ],
     "deny": [],
     "ask": []

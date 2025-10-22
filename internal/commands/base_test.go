@@ -12,10 +12,10 @@ import (
 
 func TestBaseCommand_Init(t *testing.T) {
 	tests := []struct {
-		name        string
-		setupEnv    func() (cleanup func())
-		loadConfig  func(string) (*cmd.Config, error)
-		wantErr     bool
+		name       string
+		setupEnv   func() (cleanup func())
+		loadConfig func(string) (*cmd.Config, error)
+		wantErr    bool
 	}{
 		{
 			name: "successful init",

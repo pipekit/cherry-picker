@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/alan/cherry-picker/internal/github"
 )
 
@@ -62,55 +62,31 @@ func getLastReleaseTag(client *github.Client, branch string) (string, error) {
 
 // incrementPatchVersion takes a version string and increments the patch version
 func incrementPatchVersion(version string) (string, error) {
-	// Remove 'v' prefix if present
-	cleanVersion := strings.TrimPrefix(version, "v")
-
-	// Split version into parts
-	parts := strings.Split(cleanVersion, ".")
-	if len(parts) != 3 {
+	v, err := semver.NewVersion(version)
+	if err != nil {
 		return "", fmt.Errorf("invalid version format: %s", version)
 	}
 
-	// Parse patch version
-	patch, err := strconv.Atoi(parts[2])
-	if err != nil {
-		return "", fmt.Errorf("invalid patch version: %s", parts[2])
-	}
-
 	// Increment patch version
-	patch++
+	next := v.IncPatch()
 
 	// Return new version with 'v' prefix
-	return fmt.Sprintf("v%s.%s.%d", parts[0], parts[1], patch), nil
+	return fmt.Sprintf("v%s", next.String()), nil
 }
 
 // compareVersions compares two semantic version strings
 // Returns > 0 if v1 > v2, < 0 if v1 < v2, 0 if equal
+// If parsing fails, returns 0 (versions are considered equal)
 func compareVersions(v1, v2 string) int {
-	// Remove 'v' prefix if present
-	clean1 := strings.TrimPrefix(v1, "v")
-	clean2 := strings.TrimPrefix(v2, "v")
+	ver1, err1 := semver.NewVersion(v1)
+	ver2, err2 := semver.NewVersion(v2)
 
-	parts1 := strings.Split(clean1, ".")
-	parts2 := strings.Split(clean2, ".")
-
-	// Compare each part
-	for i := 0; i < 3; i++ {
-		if i >= len(parts1) || i >= len(parts2) {
-			break
-		}
-
-		num1, _ := strconv.Atoi(parts1[i])
-		num2, _ := strconv.Atoi(parts2[i])
-
-		if num1 > num2 {
-			return 1
-		} else if num1 < num2 {
-			return -1
-		}
+	// If either version is invalid, treat as equal (defensive)
+	if err1 != nil || err2 != nil {
+		return 0
 	}
 
-	return 0
+	return ver1.Compare(ver2)
 }
 
 // getCommitsSinceTag gets commits on the branch since the given tag

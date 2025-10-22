@@ -30,10 +30,10 @@ func TestNewPickCmd(t *testing.T) {
 	assert.NotNil(t, cmd.RunE)
 
 	// Test argument validation
-	assert.Error(t, cmd.Args(cmd, []string{})) // Requires at least 1 arg
-	assert.NoError(t, cmd.Args(cmd, []string{"123"})) // 1 arg ok
+	assert.Error(t, cmd.Args(cmd, []string{}))                  // Requires at least 1 arg
+	assert.NoError(t, cmd.Args(cmd, []string{"123"}))           // 1 arg ok
 	assert.NoError(t, cmd.Args(cmd, []string{"123", "branch"})) // 2 args ok
-	assert.Error(t, cmd.Args(cmd, []string{"1", "2", "3"})) // 3 args not ok
+	assert.Error(t, cmd.Args(cmd, []string{"1", "2", "3"}))     // 3 args not ok
 }
 
 // TestPickCmd_RunE_InvalidPRNumber tests error handling for invalid PR number

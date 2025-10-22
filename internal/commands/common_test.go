@@ -11,10 +11,10 @@ import (
 
 func TestInitializeGitHubClient(t *testing.T) {
 	tests := []struct {
-		name        string
-		setupToken  func() (cleanup func())
-		config      *cmd.Config
-		wantErr     bool
+		name       string
+		setupToken func() (cleanup func())
+		config     *cmd.Config
+		wantErr    bool
 	}{
 		{
 			name: "successful initialization",
