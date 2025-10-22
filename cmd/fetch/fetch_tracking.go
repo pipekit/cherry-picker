@@ -163,12 +163,7 @@ func updateAllTrackedPRs(ctx context.Context, config *cmd.Config, client *github
 							currentStatus.PR.CIStatus = cmd.ParseCIStatus(prDetails.CIStatus)
 							ciChanged = true
 						}
-						if prDetails.Merged && currentStatus.Status != cmd.BranchStatusMerged {
-							currentStatus.Status = cmd.BranchStatusMerged
-							trackedPR.Branches[branch] = currentStatus
-							updated = true
-							slog.Info("Cherry-pick PR merged", "pr", trackedPR.Number, "branch", branch, "cherry_pick_pr", currentStatus.PR.Number)
-						} else if ciChanged {
+						if ciChanged {
 							trackedPR.Branches[branch] = currentStatus
 							updated = true
 							slog.Info("Cherry-pick PR CI status updated", "pr", trackedPR.Number, "branch", branch, "ci_status", currentStatus.PR.CIStatus)
