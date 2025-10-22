@@ -155,130 +155,63 @@ func TestRunFetch_LoadConfigError(t *testing.T) {
 	}
 }
 
-func TestTrackedPRStruct(t *testing.T) {
-	pr := cmd.TrackedPR{
-		Number: 456,
-		Title:  "Test PR Title",
-		Branches: map[string]cmd.BranchStatus{
-			"release-1.0": {Status: "pending"},
-			"release-2.0": {Status: "merged", PR: &cmd.PickPR{Number: 789, Title: "Cherry-pick", CIStatus: "passing"}},
-		},
-	}
+func TestDetermineSinceDate(t *testing.T) {
+	// Test with explicit date string
+	t.Run("Explicit date string", func(t *testing.T) {
+		since, err := determineSinceDate("2024-01-15", nil)
+		if err != nil {
+			t.Fatalf("determineSinceDate() unexpected error: %v", err)
+		}
+		expected := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
+		if !since.Equal(expected) {
+			t.Errorf("determineSinceDate() = %v, want %v", since, expected)
+		}
+	})
 
-	if pr.Number != 456 {
-		t.Errorf("cmd.TrackedPR.Number = %d, want 456", pr.Number)
-	}
+	// Test with invalid date format
+	t.Run("Invalid date format", func(t *testing.T) {
+		_, err := determineSinceDate("invalid-date", nil)
+		if err == nil {
+			t.Error("determineSinceDate() expected error for invalid date, got nil")
+		}
+	})
 
-	if len(pr.Branches) != 2 {
-		t.Errorf("cmd.TrackedPR.Branches length = %d, want 2", len(pr.Branches))
-	}
+	// Test with lastFetchDate
+	t.Run("Use lastFetchDate", func(t *testing.T) {
+		lastFetch := time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)
+		since, err := determineSinceDate("", &lastFetch)
+		if err != nil {
+			t.Fatalf("determineSinceDate() unexpected error: %v", err)
+		}
+		if !since.Equal(lastFetch) {
+			t.Errorf("determineSinceDate() = %v, want %v", since, lastFetch)
+		}
+	})
 
-	if pr.Branches["release-1.0"].Status != "pending" {
-		t.Errorf("cmd.TrackedPR.Branches[release-1.0].Status = %q, want pending", pr.Branches["release-1.0"].Status)
-	}
+	// Test with no parameters - should default to 30 days ago
+	t.Run("Default to 30 days ago", func(t *testing.T) {
+		now := time.Now()
+		since, err := determineSinceDate("", nil)
+		if err != nil {
+			t.Fatalf("determineSinceDate() unexpected error: %v", err)
+		}
+		expected := now.AddDate(0, 0, -30)
+		// Check that it's approximately 30 days ago (within 1 second)
+		if since.After(now) || since.Before(expected.Add(-1*time.Second)) {
+			t.Errorf("determineSinceDate() = %v, want approximately %v", since, expected)
+		}
+	})
 
-	if pr.Branches["release-2.0"].Status != "merged" {
-		t.Errorf("cmd.TrackedPR.Branches[release-2.0].Status = %q, want merged", pr.Branches["release-2.0"].Status)
-	}
-
-	if pr.Branches["release-2.0"].PR == nil || pr.Branches["release-2.0"].PR.Number != 789 {
-		t.Errorf("cmd.TrackedPR.Branches[release-2.0].PR.Number = %v, want 789", pr.Branches["release-2.0"].PR)
-	}
-}
-
-func TestUpdateExistingPRTitles(t *testing.T) {
-	// This test verifies the logic but can't test actual GitHub API calls
-	config := &cmd.Config{
-		Org:                "testorg",
-		Repo:               "testrepo",
-		AIAssistantCommand: "cursor-agent",
-		TrackedPRs: []cmd.TrackedPR{
-			{
-				Number: 123,
-				Title:  "Old Title",
-			},
-			{
-				Number: 124,
-				Title:  "Another Old Title",
-			},
-			{
-				Number: 125,
-				Title:  "Ignored PR Title",
-			},
-		},
-	}
-
-	// Verify we have 3 tracked PRs
-	if len(config.TrackedPRs) != 3 {
-		t.Errorf("Expected 3 tracked PRs, got %d", len(config.TrackedPRs))
-	}
-
-	// Verify the structure is intact
-	if config.TrackedPRs[2].Title != "Ignored PR Title" {
-		t.Error("Expected third PR to have the correct title")
-	}
-}
-
-func TestBranchStatusStruct(t *testing.T) {
-	// Test pending status
-	pendingStatus := cmd.BranchStatus{Status: "pending"}
-	if pendingStatus.Status != "pending" {
-		t.Errorf("cmd.BranchStatus.Status = %q, want pending", pendingStatus.Status)
-	}
-	if pendingStatus.PR != nil {
-		t.Errorf("cmd.BranchStatus.PR = %v, want nil for pending status", pendingStatus.PR)
-	}
-
-	// Test picked status with pick PR
-	pickedStatus := cmd.BranchStatus{Status: "picked", PR: &cmd.PickPR{Number: 456, Title: "Test PR", CIStatus: "pending"}}
-	if pickedStatus.Status != "picked" {
-		t.Errorf("cmd.BranchStatus.Status = %q, want picked", pickedStatus.Status)
-	}
-	if pickedStatus.PR == nil || pickedStatus.PR.Number != 456 {
-		t.Errorf("cmd.BranchStatus.PR.Number = %v, want 456", pickedStatus.PR)
-	}
-}
-
-func TestConfigWithTrackedPRs(t *testing.T) {
-	now := time.Now()
-	config := cmd.Config{
-		Org:                "testorg",
-		Repo:               "testrepo",
-		SourceBranch:       "main",
-		AIAssistantCommand: "cursor-agent",
-		LastFetchDate:      &now,
-		TrackedPRs: []cmd.TrackedPR{
-			{
-				Number: 123,
-				Title:  "Test PR 123",
-				Branches: map[string]cmd.BranchStatus{
-					"release-1.0": {Status: "pending"},
-				},
-			},
-			{
-				Number: 124,
-				Title:  "Test PR 124",
-			},
-		},
-	}
-
-	if len(config.TrackedPRs) != 2 {
-		t.Errorf("Config.cmd.TrackedPRs length = %d, want 2", len(config.TrackedPRs))
-	}
-
-	if config.TrackedPRs[0].Number != 123 {
-		t.Errorf("Config.cmd.TrackedPRs[0].Number = %d, want 123", config.TrackedPRs[0].Number)
-	}
-
-	if config.TrackedPRs[0].Branches["release-1.0"].Status != "pending" {
-		t.Errorf("Config.cmd.TrackedPRs[0].Branches[release-1.0].Status = %q, want pending", config.TrackedPRs[0].Branches["release-1.0"].Status)
-	}
-
-	if config.TrackedPRs[1].Title != "Test PR 124" {
-		t.Errorf("Config.cmd.TrackedPRs[1].Title = %v, want Test PR 124", config.TrackedPRs[1].Title)
-	}
-
-	if config.LastFetchDate == nil {
-		t.Error("Config.LastFetchDate should not be nil")
-	}
+	// Test that explicit date takes precedence over lastFetchDate
+	t.Run("Explicit date overrides lastFetchDate", func(t *testing.T) {
+		lastFetch := time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)
+		since, err := determineSinceDate("2024-03-01", &lastFetch)
+		if err != nil {
+			t.Fatalf("determineSinceDate() unexpected error: %v", err)
+		}
+		expected := time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC)
+		if !since.Equal(expected) {
+			t.Errorf("determineSinceDate() = %v, want %v (should use explicit date)", since, expected)
+		}
+	})
 }
