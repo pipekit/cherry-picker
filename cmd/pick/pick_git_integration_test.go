@@ -1,6 +1,3 @@
-//go:build integration
-// +build integration
-
 package pick
 
 import (
@@ -16,6 +13,7 @@ import (
 
 // setupTestGitRepo creates a temporary git repository for testing
 func setupTestGitRepo(t *testing.T) string {
+	t.Helper()
 	tmpDir := t.TempDir()
 
 	// Initialize git repo
@@ -42,6 +40,7 @@ func setupTestGitRepo(t *testing.T) string {
 
 // createCommit creates a commit in the test repository
 func createCommit(t *testing.T, repoDir, filename, content, message string) string {
+	t.Helper()
 	filePath := filepath.Join(repoDir, filename)
 	require.NoError(t, os.WriteFile(filePath, []byte(content), 0644))
 
@@ -66,7 +65,7 @@ func createCommit(t *testing.T, repoDir, filename, content, message string) stri
 func TestMoveSignedOffByLinesToEnd_Integration(t *testing.T) {
 	repoDir := setupTestGitRepo(t)
 	originalDir, _ := os.Getwd()
-	defer os.Chdir(originalDir)
+	defer func() { _ = os.Chdir(originalDir) }()
 
 	require.NoError(t, os.Chdir(repoDir))
 
@@ -149,7 +148,7 @@ With some description.`,
 func TestGetCommitInfo_Integration(t *testing.T) {
 	repoDir := setupTestGitRepo(t)
 	originalDir, _ := os.Getwd()
-	defer os.Chdir(originalDir)
+	defer func() { _ = os.Chdir(originalDir) }()
 
 	require.NoError(t, os.Chdir(repoDir))
 
@@ -168,7 +167,7 @@ func TestGetCommitInfo_Integration(t *testing.T) {
 func TestGetConflictedFiles_Integration(t *testing.T) {
 	repoDir := setupTestGitRepo(t)
 	originalDir, _ := os.Getwd()
-	defer os.Chdir(originalDir)
+	defer func() { _ = os.Chdir(originalDir) }()
 
 	require.NoError(t, os.Chdir(repoDir))
 
@@ -223,7 +222,7 @@ func TestGetConflictedFiles_Integration(t *testing.T) {
 func TestGetConflictedFiles_NoConflicts(t *testing.T) {
 	repoDir := setupTestGitRepo(t)
 	originalDir, _ := os.Getwd()
-	defer os.Chdir(originalDir)
+	defer func() { _ = os.Chdir(originalDir) }()
 
 	require.NoError(t, os.Chdir(repoDir))
 
@@ -269,7 +268,7 @@ func TestIsConflictError(t *testing.T) {
 func TestCherryPickCleanApply_Integration(t *testing.T) {
 	repoDir := setupTestGitRepo(t)
 	originalDir, _ := os.Getwd()
-	defer os.Chdir(originalDir)
+	defer func() { _ = os.Chdir(originalDir) }()
 
 	require.NoError(t, os.Chdir(repoDir))
 
@@ -323,7 +322,7 @@ func TestCherryPickCleanApply_Integration(t *testing.T) {
 func TestCommitMessageWithMultipleSignoffs_Integration(t *testing.T) {
 	repoDir := setupTestGitRepo(t)
 	originalDir, _ := os.Getwd()
-	defer os.Chdir(originalDir)
+	defer func() { _ = os.Chdir(originalDir) }()
 
 	require.NoError(t, os.Chdir(repoDir))
 
