@@ -73,6 +73,7 @@ type Config struct {
 	AIAssistantCommand string            `yaml:"ai_assistant_command"`
 	LastFetchDate      *time.Time        `yaml:"last_fetch_date,omitempty"`
 	LastCheckedRelease map[string]string `yaml:"last_checked_release,omitempty"` // branch -> last checked release tag
+	TrackerIssues      map[string]int    `yaml:"tracker_issues,omitempty"`       // branch -> tracker issue number
 	TrackedPRs         []TrackedPR       `yaml:"tracked_prs,omitempty"`
 }
 

@@ -84,6 +84,12 @@ func fetchAndProcessPRs(ctx context.Context, configFile string, config *cmd.Conf
 		if updateReleasedStatus(ctx, config, client) {
 			configUpdated = true
 		}
+
+		// Auto-detect tracker issues for branches
+		slog.Info("Detecting tracker issues for branches")
+		if updateTrackerIssues(ctx, config, client) {
+			configUpdated = true
+		}
 	}
 
 	if configUpdated || newPRsAdded > 0 {
