@@ -19,7 +19,8 @@
       "Bash(go get:*)",
       "Bash(cat:*)",
       "WebFetch(domain:pkg.go.dev)",
-      "WebFetch(domain:docs.github.com)"
+      "WebFetch(domain:docs.github.com)",
+      "WebFetch(domain:api.github.com)"
     ],
     "deny": [],
     "ask": []

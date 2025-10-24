@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 )
 
 // GetMergedPRs fetches all merged PRs to the specified branch with cherry-pick labels
+// Note: The _since parameter is kept for potential future use but is not currently used in queries
 func (c *Client) GetMergedPRs(ctx context.Context, branch string, _since time.Time) ([]PR, error) {
 	labels, err := c.ListLabels(ctx)
 	if err != nil {
@@ -44,8 +46,13 @@ func buildSearchQuery(org, repo, branch string, labels []string) string {
 	parts = append(parts, "is:merged")
 	parts = append(parts, fmt.Sprintf("base:%s", branch))
 
-	for _, label := range labels {
-		parts = append(parts, fmt.Sprintf("label:\"%s\"", label))
+	// Use OR logic for labels so PRs with any cherry-pick label are included
+	if len(labels) > 0 {
+		var labelParts []string
+		for _, label := range labels {
+			labelParts = append(labelParts, fmt.Sprintf("label:\"%s\"", label))
+		}
+		parts = append(parts, "("+strings.Join(labelParts, " OR ")+")")
 	}
 
 	return strings.Join(parts, " ")
@@ -64,6 +71,7 @@ func (c *Client) searchPRs(ctx context.Context, query string) ([]PR, error) {
 	var allPRs []PR
 
 	for {
+		slog.Debug("GitHub API: Searching issues/PRs", "query", query, "page", opts.Page)
 		result, resp, err := c.client.Search.Issues(ctx, query, opts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to search PRs: %w", err)
@@ -82,6 +90,7 @@ func (c *Client) searchPRs(ctx context.Context, query string) ([]PR, error) {
 			var sha string
 			if issue.PullRequestLinks != nil && issue.PullRequestLinks.URL != nil {
 				prNum := issue.GetNumber()
+				slog.Debug("GitHub API: Getting PR details", "org", extractOrgFromIssue(issue), "repo", extractRepoFromIssue(issue), "pr", prNum)
 				pr, _, err := c.client.PullRequests.Get(ctx, extractOrgFromIssue(issue), extractRepoFromIssue(issue), prNum)
 				if err == nil && pr.MergeCommitSHA != nil {
 					sha = pr.GetMergeCommitSHA()
@@ -155,6 +164,7 @@ func (c *Client) GetOpenPRs(ctx context.Context, branch string) ([]PR, error) {
 				Page:    page,
 			},
 		}
+		slog.Debug("GitHub API: Listing pull requests", "org", c.org, "repo", c.repo, "base", branch, "state", "open", "page", page)
 		return c.client.PullRequests.List(ctx, c.org, c.repo, opts)
 	})
 	if err != nil {
@@ -179,6 +189,7 @@ func (c *Client) GetOpenPRs(ctx context.Context, branch string) ([]PR, error) {
 
 // GetPR fetches details for a specific PR by number
 func (c *Client) GetPR(ctx context.Context, number int) (*PR, error) {
+	slog.Debug("GitHub API: Getting PR", "org", c.org, "repo", c.repo, "pr", number)
 	pr, _, err := c.client.PullRequests.Get(ctx, c.org, c.repo, number)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch PR #%d: %w", number, err)
@@ -196,6 +207,7 @@ func (c *Client) GetPR(ctx context.Context, number int) (*PR, error) {
 
 // GetPRWithDetails fetches detailed information for a specific PR including CI status
 func (c *Client) GetPRWithDetails(ctx context.Context, number int) (*PR, error) {
+	slog.Debug("GitHub API: Getting PR with details", "org", c.org, "repo", c.repo, "pr", number)
 	pr, _, err := c.client.PullRequests.Get(ctx, c.org, c.repo, number)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch PR #%d: %w", number, err)
@@ -233,6 +245,7 @@ func (c *Client) CreatePR(ctx context.Context, title, body, head, base string) (
 		Base:  &base,
 	}
 
+	slog.Debug("GitHub API: Creating PR", "org", c.org, "repo", c.repo, "head", head, "base", base)
 	pr, _, err := c.client.PullRequests.Create(ctx, c.org, c.repo, newPR)
 	if err != nil {
 		return 0, err

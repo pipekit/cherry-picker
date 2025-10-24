@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/google/go-github/v57/github"
@@ -87,6 +88,7 @@ func (checker *CIStatusChecker) getDetailedStatus(ctx context.Context, sha strin
 
 // getCombinedStatus gets traditional commit status, filtering DCO checks
 func (checker *CIStatusChecker) getCombinedStatus(ctx context.Context, sha string) (string, error) {
+	slog.Debug("GitHub API: Getting combined status", "org", checker.client.org, "repo", checker.client.repo, "sha", sha)
 	status, _, err := checker.client.client.Repositories.GetCombinedStatus(ctx, checker.client.org, checker.client.repo, sha, nil)
 	if err != nil {
 		return "unknown", err
@@ -140,6 +142,7 @@ func (*CIStatusChecker) evaluateStatuses(statuses []*github.RepoStatus) string {
 
 // getCheckRunsStatus gets status from GitHub Actions and modern check runs
 func (checker *CIStatusChecker) getCheckRunsStatus(ctx context.Context, sha string) (string, error) {
+	slog.Debug("GitHub API: Listing check runs", "org", checker.client.org, "repo", checker.client.repo, "sha", sha)
 	checkRuns, _, err := checker.client.client.Checks.ListCheckRunsForRef(ctx, checker.client.org, checker.client.repo, sha, nil)
 	if err != nil {
 		return "unknown", err

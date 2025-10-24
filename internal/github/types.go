@@ -36,3 +36,21 @@ type Release struct {
 	CreatedAt   time.Time
 	PublishedAt time.Time
 }
+
+// Issue represents a GitHub issue
+type Issue struct {
+	Number int
+	Title  string
+	Body   string
+	URL    string
+	State  string
+}
+
+// Comment represents a GitHub issue comment
+type Comment struct {
+	ID        int64
+	Body      string
+	User      string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}

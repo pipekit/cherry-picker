@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/google/go-github/v57/github"
 )
@@ -10,6 +11,7 @@ import (
 // RetryFailedWorkflows retries all failed workflow runs for a PR
 func (c *Client) RetryFailedWorkflows(ctx context.Context, prNumber int) error {
 	// Get the PR to find its head SHA
+	slog.Debug("GitHub API: Getting PR for workflow retry", "org", c.org, "repo", c.repo, "pr", prNumber)
 	pr, _, err := c.client.PullRequests.Get(ctx, c.org, c.repo, prNumber)
 	if err != nil {
 		return fmt.Errorf("failed to get PR #%d: %w", prNumber, err)
@@ -70,6 +72,7 @@ func (c *Client) getWorkflowRunsForCommit(ctx context.Context, sha string) ([]*g
 		},
 	}
 
+	slog.Debug("GitHub API: Listing workflow runs", "org", c.org, "repo", c.repo, "sha", sha)
 	runs, _, err := c.client.Actions.ListRepositoryWorkflowRuns(ctx, c.org, c.repo, opts)
 	if err != nil {
 		return nil, err
@@ -81,9 +84,11 @@ func (c *Client) getWorkflowRunsForCommit(ctx context.Context, sha string) ([]*g
 // retryWorkflowRun retries a specific workflow run by re-running failed jobs
 func (c *Client) retryWorkflowRun(ctx context.Context, runID int64) error {
 	// Try to re-run failed jobs first (more targeted approach)
+	slog.Debug("GitHub API: Rerunning failed jobs", "org", c.org, "repo", c.repo, "run_id", runID)
 	_, err := c.client.Actions.RerunFailedJobsByID(ctx, c.org, c.repo, runID)
 	if err != nil {
 		// If re-running failed jobs doesn't work, try re-running the entire workflow
+		slog.Debug("GitHub API: Rerunning entire workflow", "org", c.org, "repo", c.repo, "run_id", runID)
 		_, retryErr := c.client.Actions.RerunWorkflowByID(ctx, c.org, c.repo, runID)
 		if retryErr != nil {
 			return fmt.Errorf("failed to retry workflow run (tried both failed jobs and full rerun): %w (original: %v)", retryErr, err)
@@ -96,6 +101,7 @@ func (c *Client) retryWorkflowRun(ctx context.Context, runID int64) error {
 // MergePR merges a pull request using the specified merge method
 func (c *Client) MergePR(ctx context.Context, prNumber int, mergeMethod string) error {
 	// Get the PR to find its head SHA for merge validation
+	slog.Debug("GitHub API: Getting PR for merge", "org", c.org, "repo", c.repo, "pr", prNumber)
 	pr, _, err := c.client.PullRequests.Get(ctx, c.org, c.repo, prNumber)
 	if err != nil {
 		return fmt.Errorf("failed to get PR #%d: %w", prNumber, err)
@@ -114,6 +120,7 @@ func (c *Client) MergePR(ctx context.Context, prNumber int, mergeMethod string) 
 	}
 
 	// Perform the merge
+	slog.Debug("GitHub API: Merging PR", "org", c.org, "repo", c.repo, "pr", prNumber, "method", mergeMethod)
 	mergeResult, _, err := c.client.PullRequests.Merge(ctx, c.org, c.repo, prNumber, "", mergeOptions)
 	if err != nil {
 		return fmt.Errorf("failed to merge PR #%d: %w", prNumber, err)

@@ -14,7 +14,8 @@ import (
 // command encapsulates the summary command with common functionality
 type command struct {
 	commands.BaseCommand
-	TargetBranch string
+	TargetBranch  string
+	PostToTracker bool
 }
 
 // NewSummaryCmd creates the summary command
@@ -33,7 +34,8 @@ It queries GitHub directly and uses the org/repo from the config file to show:
 
 Examples:
   cherry-picker summary release-3.7    # Dev progress for release-3.7 branch
-  cherry-picker summary main           # Dev progress for main branch`,
+  cherry-picker summary main           # Dev progress for main branch
+  cherry-picker summary release-3.7 --post-to-tracker  # Post summary to tracker issue`,
 		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
 		RunE: func(cobraCmd *cobra.Command, args []string) error {
@@ -49,6 +51,8 @@ Examples:
 			return summaryCmd.Run(cobraCmd.Context())
 		},
 	}
+
+	cobraCmd.Flags().BoolVar(&summaryCmd.PostToTracker, "post-to-tracker", false, "Post summary as comment to tracker issue")
 
 	return cobraCmd
 }
@@ -90,8 +94,16 @@ func (sc *command) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to get open PRs: %w", err)
 	}
 
-	// Generate markdown output
-	generateMarkdownSummary(nextVersion, lastTag, sc.TargetBranch, commits, cherryPickMap, pickedPRs, openPRs)
+	// Generate markdown summary
+	summary := generateMarkdownSummary(nextVersion, lastTag, sc.TargetBranch, commits, cherryPickMap, pickedPRs, openPRs)
+
+	// Print summary to stdout
+	fmt.Print(summary)
+
+	// Handle posting to tracker if requested
+	if sc.PostToTracker {
+		return sc.postToTrackerIssue(ctx, nextVersion, summary)
+	}
 
 	return nil
 }

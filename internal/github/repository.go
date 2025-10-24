@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/google/go-github/v57/github"
@@ -15,6 +16,7 @@ func (c *Client) ListTags(ctx context.Context) ([]string, error) {
 			PerPage: 100,
 			Page:    page,
 		}
+		slog.Debug("GitHub API: Listing tags", "org", c.org, "repo", c.repo, "page", page)
 		return c.client.Repositories.ListTags(ctx, c.org, c.repo, opts)
 	})
 	if err != nil {
@@ -37,6 +39,7 @@ func (c *Client) ListLabels(ctx context.Context) ([]*github.Label, error) {
 			PerPage: 100,
 			Page:    page,
 		}
+		slog.Debug("GitHub API: Listing labels", "org", c.org, "repo", c.repo, "page", page)
 		return c.client.Issues.ListLabels(ctx, c.org, c.repo, opts)
 	})
 	if err != nil {
@@ -74,6 +77,7 @@ func (c *Client) GetCommitsSince(ctx context.Context, branch, sinceTag string) (
 					Page:    page,
 				},
 			}
+			slog.Debug("GitHub API: Listing commits", "org", c.org, "repo", c.repo, "branch", branch, "page", page)
 			return c.client.Repositories.ListCommits(ctx, c.org, c.repo, opts)
 		})
 		if err != nil {
@@ -93,6 +97,7 @@ func (c *Client) GetCommitsSince(ctx context.Context, branch, sinceTag string) (
 		return allCommits, nil
 	} else {
 		// Use Compare API for tag..branch comparison
+		slog.Debug("GitHub API: Comparing commits", "org", c.org, "repo", c.repo, "base", base, "head", branch)
 		comparison, _, err = c.client.Repositories.CompareCommits(ctx, c.org, c.repo, base, branch, &github.ListOptions{
 			PerPage: 100,
 		})
@@ -122,6 +127,7 @@ func (c *Client) ListReleases(ctx context.Context) ([]Release, error) {
 			PerPage: 100,
 			Page:    page,
 		}
+		slog.Debug("GitHub API: Listing releases", "org", c.org, "repo", c.repo, "page", page)
 		return c.client.Repositories.ListReleases(ctx, c.org, c.repo, opts)
 	})
 	if err != nil {
@@ -144,6 +150,7 @@ func (c *Client) ListReleases(ctx context.Context) ([]Release, error) {
 
 // GetCommitsBetweenTags gets all commits between two tags
 func (c *Client) GetCommitsBetweenTags(ctx context.Context, oldTag, newTag string) ([]Commit, error) {
+	slog.Debug("GitHub API: Comparing commits between tags", "org", c.org, "repo", c.repo, "base", oldTag, "head", newTag)
 	comparison, _, err := c.client.Repositories.CompareCommits(ctx, c.org, c.repo, oldTag, newTag, &github.ListOptions{
 		PerPage: 250, // Get more commits per page for releases
 	})

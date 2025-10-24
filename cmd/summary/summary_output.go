@@ -3,19 +3,20 @@ package summary
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/alan/cherry-picker/cmd"
 	"github.com/alan/cherry-picker/internal/github"
 )
 
-// generateMarkdownSummary outputs the markdown summary
-func generateMarkdownSummary(version, lastTag, _ string, commits []github.Commit, cherryPickMap map[int]int, pickedPRs []PickedPR, openPRs []github.PR) {
+// generateMarkdownSummary returns the markdown summary as a string
+func generateMarkdownSummary(version, lastTag, _ string, commits []github.Commit, cherryPickMap map[int]int, pickedPRs []PickedPR, openPRs []github.PR) string {
 	if len(commits) == 0 && len(pickedPRs) == 0 && len(openPRs) == 0 {
-		fmt.Printf("No changes found since %s\n", lastTag)
-		return
+		return fmt.Sprintf("No changes found since %s\n", lastTag)
 	}
 
-	fmt.Printf("### %s:\n\n", version)
+	var output strings.Builder
+	output.WriteString(fmt.Sprintf("### %s:\n\n", version))
 
 	// Track which cherry-pick PRs we've already seen in commits
 	seenCherryPickPRs := make(map[int]bool)
@@ -39,13 +40,13 @@ func generateMarkdownSummary(version, lastTag, _ string, commits []github.Commit
 					seenCherryPickPRs[cherryPickPRNum] = true
 				}
 			}
-			fmt.Printf("- [x] #%s cherry-picked as #%s\n", originalPR, cherryPickInfo.CherryPickPR)
+			output.WriteString(fmt.Sprintf("- [x] #%s cherry-picked as #%s\n", originalPR, cherryPickInfo.CherryPickPR))
 		} else {
 			// Extract PR number from original commit message
 			if prNumber := extractPRNumber(commit.Message); prNumber != "" {
-				fmt.Printf("- [x] #%s\n", prNumber)
+				output.WriteString(fmt.Sprintf("- [x] #%s\n", prNumber))
 			} else {
-				fmt.Printf("- [x] %s\n", commit.Message)
+				output.WriteString(fmt.Sprintf("- [x] %s\n", commit.Message))
 			}
 		}
 	}
@@ -55,11 +56,11 @@ func generateMarkdownSummary(version, lastTag, _ string, commits []github.Commit
 		if !seenCherryPickPRs[pickedPR.CherryPickPR] {
 			switch pickedPR.Status {
 			case cmd.BranchStatusPicked:
-				fmt.Printf("- [ ] #%d cherry-picked as #%d\n", pickedPR.OriginalPR, pickedPR.CherryPickPR)
+				output.WriteString(fmt.Sprintf("- [ ] #%d cherry-picked as #%d\n", pickedPR.OriginalPR, pickedPR.CherryPickPR))
 			case cmd.BranchStatusMerged:
-				fmt.Printf("- [x] #%d cherry-picked as #%d\n", pickedPR.OriginalPR, pickedPR.CherryPickPR)
+				output.WriteString(fmt.Sprintf("- [x] #%d cherry-picked as #%d\n", pickedPR.OriginalPR, pickedPR.CherryPickPR))
 			case cmd.BranchStatusReleased:
-				fmt.Printf("- [x] #%d cherry-picked as #%d (released)\n", pickedPR.OriginalPR, pickedPR.CherryPickPR)
+				output.WriteString(fmt.Sprintf("- [x] #%d cherry-picked as #%d (released)\n", pickedPR.OriginalPR, pickedPR.CherryPickPR))
 			case cmd.BranchStatusPending, cmd.BranchStatusFailed:
 				// These statuses shouldn't appear in picked PRs, but handle them for exhaustiveness
 			}
@@ -87,7 +88,9 @@ func generateMarkdownSummary(version, lastTag, _ string, commits []github.Commit
 	// Add open PRs that we haven't seen yet
 	for _, pr := range openPRs {
 		if !seenOpenPRs[pr.Number] {
-			fmt.Printf("- [ ] #%d (open PR)\n", pr.Number)
+			output.WriteString(fmt.Sprintf("- [ ] #%d (open PR)\n", pr.Number))
 		}
 	}
+
+	return output.String()
 }
