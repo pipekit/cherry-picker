@@ -3,7 +3,8 @@ package commands
 import (
 	"fmt"
 	"os/exec"
-	"path/filepath"
+	//	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -42,7 +43,7 @@ func IsWorkingDirectoryClean() bool {
 		// Extract the file path (skip the first 3 characters which are the status codes)
 		if len(line) > 3 {
 			filePath := strings.TrimSpace(line[3:])
-			if !IsCherryPickerFile(filePath) {
+			if !isLocalFile(filePath) {
 				return false
 			}
 		}
@@ -50,8 +51,15 @@ func IsWorkingDirectoryClean() bool {
 	return true
 }
 
-// IsCherryPickerFile checks if a file is a cherry-picker configuration file
-func IsCherryPickerFile(filePath string) bool {
-	fileName := filepath.Base(filePath)
-	return fileName == "cherry-picks.yaml"
+var keepFiles = []string{
+	"cherry-picks.yaml",
+	"CLAUDE.md",
+	".claude/",
+}
+
+// IsLocalFile checks if a file is a cherry-picker configuration file
+func isLocalFile(filePath string) bool {
+	//	fileName := filepath.Base(filePath)
+	fmt.Printf("Testing %s\n", filePath)
+	return slices.Contains(keepFiles, filePath)
 }

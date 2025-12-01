@@ -46,13 +46,9 @@ func buildSearchQuery(org, repo, branch string, labels []string) string {
 	parts = append(parts, "is:merged")
 	parts = append(parts, fmt.Sprintf("base:%s", branch))
 
-	// Use OR logic for labels so PRs with any cherry-pick label are included
+	// GitHub supports OR for labels using comma-separated values
 	if len(labels) > 0 {
-		var labelParts []string
-		for _, label := range labels {
-			labelParts = append(labelParts, fmt.Sprintf("label:\"%s\"", label))
-		}
-		parts = append(parts, "("+strings.Join(labelParts, " OR ")+")")
+		parts = append(parts, fmt.Sprintf("label:%s", strings.Join(labels, ",")))
 	}
 
 	return strings.Join(parts, " ")
@@ -77,13 +73,17 @@ func (c *Client) searchPRs(ctx context.Context, query string) ([]PR, error) {
 			return nil, fmt.Errorf("failed to search PRs: %w", err)
 		}
 
+		slog.Debug("GitHub search results", "total_count", result.GetTotal(), "returned_count", len(result.Issues), "page", opts.Page)
+
 		for _, issue := range result.Issues {
 			if !issue.IsPullRequest() {
+				slog.Debug("Skipping non-PR issue", "number", issue.GetNumber())
 				continue
 			}
 
 			cherryPickBranches := extractCherryPickBranchesFromLabels(issue.Labels)
 			if len(cherryPickBranches) == 0 {
+				slog.Debug("Skipping PR with no cherry-pick labels", "pr", issue.GetNumber(), "label_count", len(issue.Labels))
 				continue
 			}
 
@@ -205,7 +205,7 @@ func (c *Client) GetPR(ctx context.Context, number int) (*PR, error) {
 	}, nil
 }
 
-// GetPRWithDetails fetches detailed information for a specific PR including CI status
+// GetPRWithDetails fetches detailed information for a specific PR including CI status and retry count
 func (c *Client) GetPRWithDetails(ctx context.Context, number int) (*PR, error) {
 	slog.Debug("GitHub API: Getting PR with details", "org", c.org, "repo", c.repo, "pr", number)
 	pr, _, err := c.client.PullRequests.Get(ctx, c.org, c.repo, number)
@@ -213,20 +213,30 @@ func (c *Client) GetPRWithDetails(ctx context.Context, number int) (*PR, error) 
 		return nil, fmt.Errorf("failed to fetch PR #%d: %w", number, err)
 	}
 
+	sha := pr.GetHead().GetSHA()
+
 	// Check CI status by getting commit status
-	ciStatus, err := c.getPRCIStatus(ctx, pr.GetHead().GetSHA())
+	ciStatus, err := c.getPRCIStatus(ctx, sha)
 	if err != nil {
 		// Don't fail the whole request if we can't get CI status
 		ciStatus = "unknown"
 	}
 
+	// Get run attempt from workflow runs
+	runAttempt, err := c.getPRRunAttempt(ctx, sha)
+	if err != nil {
+		// Don't fail the whole request if we can't get run attempt
+		runAttempt = 0
+	}
+
 	return &PR{
-		Number:   pr.GetNumber(),
-		Title:    pr.GetTitle(),
-		URL:      pr.GetHTMLURL(),
-		SHA:      pr.GetMergeCommitSHA(),
-		Merged:   pr.MergedAt != nil,
-		CIStatus: ciStatus,
+		Number:     pr.GetNumber(),
+		Title:      pr.GetTitle(),
+		URL:        pr.GetHTMLURL(),
+		SHA:        pr.GetMergeCommitSHA(),
+		Merged:     pr.MergedAt != nil,
+		CIStatus:   ciStatus,
+		RunAttempt: runAttempt,
 	}, nil
 }
 
@@ -234,6 +244,12 @@ func (c *Client) GetPRWithDetails(ctx context.Context, number int) (*PR, error) 
 func (c *Client) getPRCIStatus(ctx context.Context, sha string) (string, error) {
 	checker := c.newCIStatusChecker()
 	return checker.GetStatus(ctx, sha)
+}
+
+// getPRRunAttempt gets the run attempt for a commit SHA
+func (c *Client) getPRRunAttempt(ctx context.Context, sha string) (int, error) {
+	checker := c.newCIStatusChecker()
+	return checker.GetRunAttempt(ctx, sha)
 }
 
 // CreatePR creates a new pull request

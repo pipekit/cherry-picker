@@ -15,6 +15,10 @@ import (
 // Example: "(cherry picked from commit abc123def456)"
 var cherryPickPattern = regexp.MustCompile(`\(cherry picked from commit ([a-f0-9]+)\)`)
 
+// botCherryPickPattern matches GitHub bot cherry-pick PR format
+// Example: "(cherry-pick #15033 for 3.6)"
+var botCherryPickPattern = regexp.MustCompile(`\(cherry-pick #(\d+) for [\d.]+\)`)
+
 // prNumberPattern matches PR numbers in commit messages
 // Example: "Fix bug (#123)" or "Merge pull request #456"
 var prNumberPattern = regexp.MustCompile(`#(\d+)`)
@@ -42,10 +46,58 @@ func updateReleasedStatus(ctx context.Context, config *cmd.Config, client *githu
 		config.LastCheckedRelease = make(map[string]string)
 	}
 
+	// First, collect all unique branches with merged PRs
+	// and compute unchecked releases once per branch
+	type branchReleases struct {
+		relevantReleases  []github.Release
+		uncheckedReleases []github.Release
+		lastChecked       string
+	}
+	branchReleasesMap := make(map[string]*branchReleases)
+
+	// Collect all unique branches that have merged PRs
+	for i := range config.TrackedPRs {
+		trackedPR := &config.TrackedPRs[i]
+		for branchName, branchStatus := range trackedPR.Branches {
+			// Only check merged PRs that haven't been marked as released yet
+			if branchStatus.Status != cmd.BranchStatusMerged {
+				continue
+			}
+			if branchStatus.PR == nil {
+				continue
+			}
+
+			// Only compute releases for this branch once
+			if _, exists := branchReleasesMap[branchName]; !exists {
+				// Filter releases to only those relevant for this branch
+				relevantReleases := filterReleasesForBranch(allReleases, branchName)
+				lastChecked := config.LastCheckedRelease[branchName]
+				uncheckedReleases := filterUncheckedReleases(relevantReleases, lastChecked)
+
+				branchReleasesMap[branchName] = &branchReleases{
+					relevantReleases:  relevantReleases,
+					uncheckedReleases: uncheckedReleases,
+					lastChecked:       lastChecked,
+				}
+			}
+		}
+	}
+
+	// Log summary of branches to check (once per branch instead of per PR)
+	for branchName, br := range branchReleasesMap {
+		if len(br.relevantReleases) == 0 {
+			slog.Debug("No relevant releases for branch", "branch", branchName)
+		} else if len(br.uncheckedReleases) == 0 {
+			slog.Debug("No new releases to check for branch", "branch", branchName, "last_checked", br.lastChecked)
+		} else {
+			slog.Debug("Checking new releases", "branch", branchName, "new_count", len(br.uncheckedReleases), "total_relevant", len(br.relevantReleases))
+		}
+	}
+
 	// Track which branches we've checked (to update last checked release)
 	branchesChecked := make(map[string]string) // branch -> latest release checked
 
-	// For each tracked PR, check each branch that's merged
+	// Now check each PR against the releases for its branches
 	for i := range config.TrackedPRs {
 		trackedPR := &config.TrackedPRs[i]
 
@@ -58,33 +110,20 @@ func updateReleasedStatus(ctx context.Context, config *cmd.Config, client *githu
 				continue
 			}
 
-			// Filter releases to only those relevant for this branch
-			// e.g., "release-3.6" -> only check releases starting with "v3.6"
-			relevantReleases := filterReleasesForBranch(allReleases, branchName)
-			if len(relevantReleases) == 0 {
-				slog.Debug("No relevant releases for branch", "branch", branchName)
+			// Get the pre-computed releases for this branch
+			br, exists := branchReleasesMap[branchName]
+			if !exists || len(br.uncheckedReleases) == 0 {
 				continue
 			}
-
-			// Filter to only unchecked releases (newer than last checked)
-			lastChecked := config.LastCheckedRelease[branchName]
-			uncheckedReleases := filterUncheckedReleases(relevantReleases, lastChecked)
-
-			if len(uncheckedReleases) == 0 {
-				slog.Debug("No new releases to check for branch", "branch", branchName, "last_checked", lastChecked)
-				continue
-			}
-
-			slog.Debug("Checking new releases", "branch", branchName, "new_count", len(uncheckedReleases), "total_relevant", len(relevantReleases))
 
 			// Track the latest release we're checking for this branch
-			if len(uncheckedReleases) > 0 {
+			if len(br.uncheckedReleases) > 0 {
 				// Releases are sorted newest first, so first one is the latest
-				branchesChecked[branchName] = uncheckedReleases[0].TagName
+				branchesChecked[branchName] = br.uncheckedReleases[0].TagName
 			}
 
 			// Check if this cherry-pick PR's commit is in any release
-			if isInRelease(ctx, client, uncheckedReleases, trackedPR.Number) {
+			if isInRelease(ctx, client, br.uncheckedReleases, br.lastChecked, trackedPR.Number) {
 				slog.Info("Cherry-pick found in release", "pr", trackedPR.Number, "branch", branchName, "cherry_pick_pr", branchStatus.PR.Number)
 				branchStatus.Status = cmd.BranchStatusReleased
 				trackedPR.Branches[branchName] = branchStatus
@@ -148,7 +187,7 @@ func filterReleasesForBranch(releases []github.Release, branchName string) []git
 }
 
 // isInRelease checks if a cherry-pick PR is included in any release
-func isInRelease(ctx context.Context, client *github.Client, releases []github.Release, originalPRNumber int) bool {
+func isInRelease(ctx context.Context, client *github.Client, releases []github.Release, lastChecked string, originalPRNumber int) bool {
 	// For each release, check if it's on the target branch
 	for i := 0; i < len(releases)-1; i++ {
 		currentRelease := releases[i]
@@ -170,14 +209,17 @@ func isInRelease(ctx context.Context, client *github.Client, releases []github.R
 		}
 	}
 
-	// Check the oldest release (between first release and beginning of time)
+	// Check the oldest release (or single release case)
+	// When there's only one unchecked release, we need to compare from lastChecked to it
 	if len(releases) > 0 {
 		oldestRelease := releases[len(releases)-1]
-		commits, err := client.GetCommitsBetweenTags(ctx, "", oldestRelease.TagName)
+		// Use lastChecked as the starting point if available, otherwise start from beginning
+		fromTag := lastChecked
+		commits, err := client.GetCommitsBetweenTags(ctx, fromTag, oldestRelease.TagName)
 		if err == nil {
 			for _, commit := range commits {
 				if isCherryPickCommit(commit, originalPRNumber) {
-					slog.Debug("Found cherry-pick in oldest release", "release", oldestRelease.TagName, "commit", commit.SHA[:8], "original_pr", originalPRNumber)
+					slog.Debug("Found cherry-pick in release", "release", oldestRelease.TagName, "commit", commit.SHA[:8], "original_pr", originalPRNumber, "from", fromTag)
 					return true
 				}
 			}
@@ -189,7 +231,15 @@ func isInRelease(ctx context.Context, client *github.Client, releases []github.R
 
 // isCherryPickCommit checks if a commit is a cherry-pick of the specified original PR
 func isCherryPickCommit(commit github.Commit, originalPRNumber int) bool {
-	// Check for cherry-pick marker
+	// Check for GitHub bot cherry-pick pattern: "(cherry-pick #15033 for 3.6)"
+	if matches := botCherryPickPattern.FindStringSubmatch(commit.Message); len(matches) > 1 {
+		prNum, err := strconv.Atoi(matches[1])
+		if err == nil && prNum == originalPRNumber {
+			return true
+		}
+	}
+
+	// Check for manual git cherry-pick marker: "(cherry picked from commit SHA)"
 	if cherryPickPattern.MatchString(commit.Message) {
 		// Also check if the commit message mentions the original PR number
 		matches := prNumberPattern.FindAllStringSubmatch(commit.Message, -1)

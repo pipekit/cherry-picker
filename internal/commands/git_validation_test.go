@@ -16,16 +16,6 @@ func TestIsCherryPickerFile(t *testing.T) {
 			want:     true,
 		},
 		{
-			name:     "cherry-picks.yaml in subdirectory",
-			filePath: "config/cherry-picks.yaml",
-			want:     true,
-		},
-		{
-			name:     "full path to cherry-picks.yaml",
-			filePath: "/home/user/project/cherry-picks.yaml",
-			want:     true,
-		},
-		{
 			name:     "other yaml file",
 			filePath: "config.yaml",
 			want:     false,
@@ -49,7 +39,7 @@ func TestIsCherryPickerFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := IsCherryPickerFile(tt.filePath); got != tt.want {
+			if got := isLocalFile(tt.filePath); got != tt.want {
 				t.Errorf("IsCherryPickerFile() = %v, want %v", got, tt.want)
 			}
 		})

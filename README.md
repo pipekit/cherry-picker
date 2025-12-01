@@ -175,7 +175,6 @@ This command will:
 - Query GitHub for commits to the specified target branch since the last release
 - Generate markdown output showing cherry-picked PRs and their status
 - Include in-progress items (picked but not yet merged)
-- Show open PRs against the target branch
 - Determine the next patch version based on existing tags
 
 ### Check Status

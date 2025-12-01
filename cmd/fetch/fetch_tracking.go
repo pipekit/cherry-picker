@@ -124,6 +124,20 @@ func updateAllTrackedPRs(ctx context.Context, config *cmd.Config, client *github
 
 	for i := range config.TrackedPRs {
 		trackedPR := &config.TrackedPRs[i]
+
+		// Skip PR if all branches are already finalized (merged or released)
+		allFinalized := true
+		for _, status := range trackedPR.Branches {
+			if status.Status != cmd.BranchStatusMerged && status.Status != cmd.BranchStatusReleased {
+				allFinalized = false
+				break
+			}
+		}
+		if allFinalized {
+			slog.Debug("Skipping fully finalized tracked PR", "pr", trackedPR.Number)
+			continue
+		}
+
 		slog.Info("Checking tracked PR", "pr", trackedPR.Number)
 
 		cherryPickPRs, err := client.GetCherryPickPRsFromComments(ctx, trackedPR.Number)
@@ -170,12 +184,16 @@ func updateAllTrackedPRs(ctx context.Context, config *cmd.Config, client *github
 				} else if currentStatus.Status == cmd.BranchStatusPicked && currentStatus.PR != nil {
 					prDetails, err := client.GetPRWithDetails(ctx, currentStatus.PR.Number)
 					if err == nil {
-						ciChanged := false
+						changed := false
 						if currentStatus.PR.CIStatus != cmd.ParseCIStatus(prDetails.CIStatus) {
 							currentStatus.PR.CIStatus = cmd.ParseCIStatus(prDetails.CIStatus)
-							ciChanged = true
+							changed = true
 						}
-						if ciChanged {
+						if currentStatus.PR.RunAttempt != prDetails.RunAttempt {
+							currentStatus.PR.RunAttempt = prDetails.RunAttempt
+							changed = true
+						}
+						if changed {
 							trackedPR.Branches[branch] = currentStatus
 							updated = true
 							slog.Info("Cherry-pick PR CI status updated", "pr", trackedPR.Number, "branch", branch, "ci_status", currentStatus.PR.CIStatus)
@@ -213,9 +231,10 @@ func determineBranchStatus(ctx context.Context, cherryPick github.CherryPickPR, 
 		return cmd.BranchStatus{
 			Status: cmd.BranchStatusPicked,
 			PR: &cmd.PickPR{
-				Number:   cherryPick.Number,
-				Title:    fmt.Sprintf("%s (cherry-pick %s)", trackedPR.Title, cherryPick.Branch),
-				CIStatus: "unknown",
+				Number:     cherryPick.Number,
+				Title:      fmt.Sprintf("%s (cherry-pick %s)", trackedPR.Title, cherryPick.Branch),
+				CIStatus:   "unknown",
+				RunAttempt: 0,
 			},
 		}
 	}
@@ -228,9 +247,10 @@ func determineBranchStatus(ctx context.Context, cherryPick github.CherryPickPR, 
 	return cmd.BranchStatus{
 		Status: status,
 		PR: &cmd.PickPR{
-			Number:   prDetails.Number,
-			Title:    prDetails.Title,
-			CIStatus: cmd.ParseCIStatus(prDetails.CIStatus),
+			Number:     prDetails.Number,
+			Title:      prDetails.Title,
+			CIStatus:   cmd.ParseCIStatus(prDetails.CIStatus),
+			RunAttempt: prDetails.RunAttempt,
 		},
 	}
 }

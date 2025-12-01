@@ -186,3 +186,31 @@ func (checker *CIStatusChecker) getCheckRunsStatus(ctx context.Context, sha stri
 
 	return "unknown", nil
 }
+
+// GetRunAttempt returns the maximum run_attempt from workflow runs for a given SHA
+// run_attempt starts at 1 for the first run, 2 for first retry, etc.
+func (checker *CIStatusChecker) GetRunAttempt(ctx context.Context, sha string) (int, error) {
+	// Get workflow runs for this commit directly
+	slog.Debug("GitHub API: Listing workflow runs for commit", "org", checker.client.org, "repo", checker.client.repo, "sha", sha)
+	opts := &github.ListWorkflowRunsOptions{
+		HeadSHA: sha,
+		ListOptions: github.ListOptions{
+			PerPage: 100,
+		},
+	}
+
+	runs, _, err := checker.client.client.Actions.ListRepositoryWorkflowRuns(ctx, checker.client.org, checker.client.repo, opts)
+	if err != nil {
+		return 0, err
+	}
+
+	maxAttempt := 0
+	for _, run := range runs.WorkflowRuns {
+		attempt := run.GetRunAttempt()
+		if attempt > maxAttempt {
+			maxAttempt = attempt
+		}
+	}
+
+	return maxAttempt, nil
+}

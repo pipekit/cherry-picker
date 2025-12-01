@@ -117,15 +117,15 @@ func TestBuildSearchQuery(t *testing.T) {
 			repo:     "test-repo",
 			branch:   "main",
 			labels:   []string{"cherry-pick/3.6"},
-			expected: `repo:test-org/test-repo is:pr is:merged base:main (label:"cherry-pick/3.6")`,
+			expected: `repo:test-org/test-repo is:pr is:merged base:main label:cherry-pick/3.6`,
 		},
 		{
-			name:     "multiple labels with OR",
+			name:     "multiple labels with comma (OR)",
 			org:      "test-org",
 			repo:     "test-repo",
 			branch:   "main",
 			labels:   []string{"cherry-pick/3.6", "cherry-pick/3.7"},
-			expected: `repo:test-org/test-repo is:pr is:merged base:main (label:"cherry-pick/3.6" OR label:"cherry-pick/3.7")`,
+			expected: `repo:test-org/test-repo is:pr is:merged base:main label:cherry-pick/3.6,cherry-pick/3.7`,
 		},
 		{
 			name:     "no labels",

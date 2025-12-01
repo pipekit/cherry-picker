@@ -39,10 +39,9 @@ func parseCherryPickCommit(message string) *CherryPickInfo {
 	// Now try to extract the original PR number
 	// Look for patterns like "title (#1234) (cherry-pick...)" or "title. Fixes #1234 (cherry-pick...)"
 	originalPRPatterns := []*regexp.Regexp{
+		regexp.MustCompile(`\(cherry-pick #(\d+)`),     // "...cherry-pick #14920 for 3.7)" - extract from cherry-pick reference
 		regexp.MustCompile(`\(#(\d+)\) \(cherry-pick`), // "title (#1234) (cherry-pick...)"
-		regexp.MustCompile(`[Ff]ixes #(\d+)`),          // "Fixes #1234"
-		regexp.MustCompile(`[Cc]loses #(\d+)`),         // "Closes #1234"
-		regexp.MustCompile(`#(\d+)`),                   // Any #1234 pattern as fallback
+		regexp.MustCompile(`#(\d+)`),                   // Any #1234 pattern as fallback (will skip Fixes/Closes since those might be issue refs)
 	}
 
 	for _, pattern := range originalPRPatterns {

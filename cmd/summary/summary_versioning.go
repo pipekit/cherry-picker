@@ -3,6 +3,8 @@ package summary
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"os/exec"
 	"regexp"
 	"sort"
 	"strings"
@@ -11,12 +13,30 @@ import (
 	"github.com/alan/cherry-picker/internal/github"
 )
 
+// fetchGitData fetches the latest tags and commits from the remote repository
+func fetchGitData(ctx context.Context, branch string) error {
+	slog.Debug("Fetching latest data from git remote", "branch", branch)
+	// Fetch tags and the specific branch
+	cmd := exec.CommandContext(ctx, "git", "fetch", "--tags", "origin", branch)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to fetch from remote: %w (output: %s)", err, string(output))
+	}
+	return nil
+}
+
 // getLastReleaseTag finds the most recent release tag for the given branch
-func getLastReleaseTag(ctx context.Context, client *github.Client, branch string) (string, error) {
-	// Get all tags from the repository
-	tags, err := client.ListTags(ctx)
+func getLastReleaseTag(ctx context.Context, branch string) (string, error) {
+	// Get all tags from the local git repository
+	cmd := exec.CommandContext(ctx, "git", "tag", "-l")
+	output, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("failed to list tags: %w", err)
+		return "", fmt.Errorf("failed to list git tags: %w", err)
+	}
+
+	// Parse tags from output
+	var tags []string
+	if len(output) > 0 {
+		tags = strings.Split(strings.TrimSpace(string(output)), "\n")
 	}
 
 	if len(tags) == 0 {
@@ -91,6 +111,27 @@ func compareVersions(v1, v2 string) int {
 }
 
 // getCommitsSinceTag gets commits on the branch since the given tag
-func getCommitsSinceTag(ctx context.Context, client *github.Client, branch, sinceTag string) ([]github.Commit, error) {
-	return client.GetCommitsSince(ctx, branch, sinceTag)
+func getCommitsSinceTag(ctx context.Context, branch, sinceTag string) ([]github.Commit, error) {
+	// Use git log to get commits since the tag
+	// Format: %s = subject (commit message)
+	// #nosec G204 - Arguments are passed separately to exec.CommandContext, not through shell
+	cmd := exec.CommandContext(ctx, "git", "log", "--format=%s", fmt.Sprintf("%s..%s", sinceTag, branch))
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get git log: %w", err)
+	}
+
+	// Parse commits from output
+	var commits []github.Commit
+	if len(output) > 0 {
+		for line := range strings.SplitSeq(strings.TrimSpace(string(output)), "\n") {
+			if line != "" {
+				commits = append(commits, github.Commit{
+					Message: line,
+				})
+			}
+		}
+	}
+
+	return commits, nil
 }

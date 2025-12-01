@@ -2,6 +2,7 @@ package summary
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -10,87 +11,75 @@ import (
 )
 
 // generateMarkdownSummary returns the markdown summary as a string
-func generateMarkdownSummary(version, lastTag, _ string, commits []github.Commit, cherryPickMap map[int]int, pickedPRs []PickedPR, openPRs []github.PR) string {
-	if len(commits) == 0 && len(pickedPRs) == 0 && len(openPRs) == 0 {
+func generateMarkdownSummary(version, lastTag, _ string, commits []github.Commit, cherryPickMap map[int]int, pickedPRs []PickedPR) string {
+	if len(commits) == 0 && len(pickedPRs) == 0 {
 		return fmt.Sprintf("No changes found since %s\n", lastTag)
 	}
 
-	var output strings.Builder
-	output.WriteString(fmt.Sprintf("### %s:\n\n", version))
-
-	// Track which cherry-pick PRs we've already seen in commits
+	type entry struct {
+		prNum int
+		line  string
+	}
+	var entries []entry
 	seenCherryPickPRs := make(map[int]bool)
 
-	// Process commits first
+	// Process commits
 	for _, commit := range commits {
 		if cherryPickInfo := parseCherryPickCommit(commit.Message); cherryPickInfo != nil {
 			originalPR := cherryPickInfo.OriginalPR
-			// If we couldn't parse the original PR from the commit message, check our mapping
-			if originalPR == "unknown" {
-				if cherryPickPRNum, err := strconv.Atoi(cherryPickInfo.CherryPickPR); err == nil {
-					if mappedOriginal, exists := cherryPickMap[cherryPickPRNum]; exists {
-						originalPR = strconv.Itoa(mappedOriginal)
-					}
-					// Mark this cherry-pick PR as seen
-					seenCherryPickPRs[cherryPickPRNum] = true
+			if cherryPickPRNum, err := strconv.Atoi(cherryPickInfo.CherryPickPR); err == nil {
+				if mappedOriginal, exists := cherryPickMap[cherryPickPRNum]; exists {
+					originalPR = strconv.Itoa(mappedOriginal)
 				}
-			} else {
-				// Mark this cherry-pick PR as seen
-				if cherryPickPRNum, err := strconv.Atoi(cherryPickInfo.CherryPickPR); err == nil {
-					seenCherryPickPRs[cherryPickPRNum] = true
-				}
+				seenCherryPickPRs[cherryPickPRNum] = true
 			}
-			output.WriteString(fmt.Sprintf("- [x] #%s cherry-picked as #%s\n", originalPR, cherryPickInfo.CherryPickPR))
+			prNum, _ := strconv.Atoi(originalPR)
+			entries = append(entries, entry{prNum, fmt.Sprintf("- [x] #%s cherry-picked as #%s\n", originalPR, cherryPickInfo.CherryPickPR)})
+		} else if prNumber := extractPRNumber(commit.Message); prNumber != "" {
+			prNum, _ := strconv.Atoi(prNumber)
+			entries = append(entries, entry{prNum, fmt.Sprintf("- [x] #%s\n", prNumber)})
 		} else {
-			// Extract PR number from original commit message
-			if prNumber := extractPRNumber(commit.Message); prNumber != "" {
-				output.WriteString(fmt.Sprintf("- [x] #%s\n", prNumber))
-			} else {
-				output.WriteString(fmt.Sprintf("- [x] %s\n", commit.Message))
-			}
+			entries = append(entries, entry{0, fmt.Sprintf("- [x] %s\n", commit.Message)})
 		}
 	}
 
-	// Add picked PRs that haven't been seen in commits yet
+	// Add picked PRs not yet in commits
 	for _, pickedPR := range pickedPRs {
 		if !seenCherryPickPRs[pickedPR.CherryPickPR] {
+			var line string
 			switch pickedPR.Status {
+			case cmd.BranchStatusPending:
+				line = fmt.Sprintf("- [ ] #%d\n", pickedPR.OriginalPR)
 			case cmd.BranchStatusPicked:
-				output.WriteString(fmt.Sprintf("- [ ] #%d cherry-picked as #%d\n", pickedPR.OriginalPR, pickedPR.CherryPickPR))
+				fallthrough
+			case cmd.BranchStatusFailed:
+				line = fmt.Sprintf("- [ ] #%d cherry-picked as #%d\n", pickedPR.OriginalPR, pickedPR.CherryPickPR)
 			case cmd.BranchStatusMerged:
-				output.WriteString(fmt.Sprintf("- [x] #%d cherry-picked as #%d\n", pickedPR.OriginalPR, pickedPR.CherryPickPR))
+				line = fmt.Sprintf("- [x] #%d cherry-picked as #%d\n", pickedPR.OriginalPR, pickedPR.CherryPickPR)
 			case cmd.BranchStatusReleased:
-				output.WriteString(fmt.Sprintf("- [x] #%d cherry-picked as #%d (released)\n", pickedPR.OriginalPR, pickedPR.CherryPickPR))
-			case cmd.BranchStatusPending, cmd.BranchStatusFailed:
-				// These statuses shouldn't appear in picked PRs, but handle them for exhaustiveness
+				line = ""
+			}
+			if line != "" {
+				entries = append(entries, entry{pickedPR.OriginalPR, line})
 			}
 		}
 	}
 
-	// Add open PRs targeting this branch (these are new work, not cherry-picks)
-	seenOpenPRs := make(map[int]bool)
-
-	// First, mark any PRs we've already seen in commits or picked PRs to avoid duplicates
-	for _, commit := range commits {
-		if prNumber := extractPRNumber(commit.Message); prNumber != "" {
-			if prNum, err := strconv.Atoi(prNumber); err == nil {
-				seenOpenPRs[prNum] = true
-			}
+	// Sort by PR number (0s go last)
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].prNum == 0 {
+			return false
 		}
-	}
-
-	// Mark picked PRs as seen
-	for _, pickedPR := range pickedPRs {
-		seenOpenPRs[pickedPR.CherryPickPR] = true
-		seenOpenPRs[pickedPR.OriginalPR] = true
-	}
-
-	// Add open PRs that we haven't seen yet
-	for _, pr := range openPRs {
-		if !seenOpenPRs[pr.Number] {
-			output.WriteString(fmt.Sprintf("- [ ] #%d (open PR)\n", pr.Number))
+		if entries[j].prNum == 0 {
+			return true
 		}
-	}
+		return entries[i].prNum < entries[j].prNum
+	})
 
+	var output strings.Builder
+	output.WriteString(fmt.Sprintf("### %s:\n\n", version))
+	for _, e := range entries {
+		output.WriteString(e.line)
+	}
 	return output.String()
 }

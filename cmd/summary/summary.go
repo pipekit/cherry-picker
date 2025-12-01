@@ -52,7 +52,7 @@ Examples:
 		},
 	}
 
-	cobraCmd.Flags().BoolVar(&summaryCmd.PostToTracker, "post-to-tracker", false, "Post summary as comment to tracker issue")
+	cobraCmd.Flags().BoolVarP(&summaryCmd.PostToTracker, "post-to-tracker", "p", false, "Post summary as comment to tracker issue")
 
 	return cobraCmd
 }
@@ -67,8 +67,13 @@ func (sc *command) Run(ctx context.Context) error {
 
 	slog.Info("Generating summary", "org", org, "repo", repo, "branch", sc.TargetBranch)
 
-	// Get the last release tag for this branch
-	lastTag, err := getLastReleaseTag(ctx, sc.GitHubClient, sc.TargetBranch)
+	// Fetch latest tags and commits from remote to ensure we have up-to-date data
+	if err := fetchGitData(ctx, sc.TargetBranch); err != nil {
+		slog.Warn("Failed to fetch git data from remote, using local data", "error", err)
+	}
+
+	// Get the last release tag for this branch from local git
+	lastTag, err := getLastReleaseTag(ctx, sc.TargetBranch)
 	if err != nil {
 		return fmt.Errorf("failed to get last release tag: %w", err)
 	}
@@ -79,8 +84,8 @@ func (sc *command) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to increment version: %w", err)
 	}
 
-	// Get commits since the last tag
-	commits, err := getCommitsSinceTag(ctx, sc.GitHubClient, sc.TargetBranch, lastTag)
+	// Get commits since the last tag from local git
+	commits, err := getCommitsSinceTag(ctx, sc.TargetBranch, lastTag)
 	if err != nil {
 		return fmt.Errorf("failed to get commits: %w", err)
 	}
@@ -88,14 +93,8 @@ func (sc *command) Run(ctx context.Context) error {
 	// Get picked PRs that might not be in commits yet
 	pickedPRs := getPickedPRs(sc.Config, sc.TargetBranch)
 
-	// Get open PRs targeting this branch
-	openPRs, err := sc.GitHubClient.GetOpenPRs(ctx, sc.TargetBranch)
-	if err != nil {
-		return fmt.Errorf("failed to get open PRs: %w", err)
-	}
-
 	// Generate markdown summary
-	summary := generateMarkdownSummary(nextVersion, lastTag, sc.TargetBranch, commits, cherryPickMap, pickedPRs, openPRs)
+	summary := generateMarkdownSummary(nextVersion, lastTag, sc.TargetBranch, commits, cherryPickMap, pickedPRs)
 
 	// Print summary to stdout
 	fmt.Print(summary)

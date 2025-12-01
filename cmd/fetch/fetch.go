@@ -57,6 +57,17 @@ func (fc *command) Run(ctx context.Context) error {
 	return fetchAndProcessPRs(ctx, *fc.ConfigFile, fc.Config, since, fc.SaveConfig)
 }
 
+// ExecuteFetch runs the fetch logic with the given config and save function
+// This is exported so other commands can trigger a fetch operation
+func ExecuteFetch(ctx context.Context, configFile string, config *cmd.Config, saveConfig func(string, *cmd.Config) error) error {
+	since, err := determineSinceDate("", config.LastFetchDate)
+	if err != nil {
+		return err
+	}
+
+	return fetchAndProcessPRs(ctx, configFile, config, since, saveConfig)
+}
+
 // determineSinceDate determines the date to fetch PRs from
 func determineSinceDate(sinceDate string, lastFetchDate *time.Time) (time.Time, error) {
 	if sinceDate != "" {

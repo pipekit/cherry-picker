@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/alan/cherry-picker/internal/github"
+	"github.com/fatih/color"
 )
 
 // postToTrackerIssue handles posting or updating the summary as a comment on the tracker issue
@@ -91,7 +92,7 @@ func findExistingComment(comments []github.Comment, username, version string) *g
 	return nil
 }
 
-// generateDiff generates a simple diff between old and new content
+// generateDiff generates a colorful diff between old and new content
 func generateDiff(oldContent, newContent string) string {
 	// Trim whitespace for comparison
 	oldTrimmed := strings.TrimSpace(oldContent)
@@ -101,15 +102,20 @@ func generateDiff(oldContent, newContent string) string {
 		return ""
 	}
 
+	// Color setup
+	headerColor := color.New(color.Bold)
+	removedColor := color.New(color.FgRed)
+	addedColor := color.New(color.FgGreen)
+
 	// Simple diff showing removed and added lines
 	var diff strings.Builder
 
 	oldLines := strings.Split(oldContent, "\n")
 	newLines := strings.Split(newContent, "\n")
 
-	// Show side-by-side comparison
-	diff.WriteString("--- Old\n")
-	diff.WriteString("+++ New\n\n")
+	// Show colorful headers
+	diff.WriteString(headerColor.Sprint("--- Old\n"))
+	diff.WriteString(headerColor.Sprint("+++ New\n\n"))
 
 	maxLen := max(len(oldLines), len(newLines))
 
@@ -125,10 +131,10 @@ func generateDiff(oldContent, newContent string) string {
 
 		if oldLine != newLine {
 			if oldLine != "" {
-				diff.WriteString(fmt.Sprintf("- %s\n", oldLine))
+				diff.WriteString(removedColor.Sprintf("- %s\n", oldLine))
 			}
 			if newLine != "" {
-				diff.WriteString(fmt.Sprintf("+ %s\n", newLine))
+				diff.WriteString(addedColor.Sprintf("+ %s\n", newLine))
 			}
 		}
 	}

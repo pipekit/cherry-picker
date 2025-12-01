@@ -2,33 +2,54 @@
 package status
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sort"
 
 	"github.com/alan/cherry-picker/cmd"
+	"github.com/alan/cherry-picker/cmd/fetch"
 	"github.com/spf13/cobra"
 )
 
 // NewStatusCmd creates and returns the status command
-func NewStatusCmd(globalConfigFile *string, loadConfig func(string) (*cmd.Config, error)) *cobra.Command {
+func NewStatusCmd(globalConfigFile *string, loadConfig func(string) (*cmd.Config, error), saveConfig func(string, *cmd.Config) error) *cobra.Command {
+	var showReleased bool
+	var doFetch bool
+
 	statusCmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show status of tracked PRs across target branches",
 		Long: `Display the current status of all tracked PRs.
-Shows which PRs are pending, picked, or merged for each target branch.`,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return runStatus(*globalConfigFile, loadConfig)
+Shows which PRs are pending, picked, or merged for each target branch.
+By default, hides PRs that are completely released across all branches.`,
+		RunE: func(cobraCmd *cobra.Command, _ []string) error {
+			return runStatus(cobraCmd.Context(), *globalConfigFile, loadConfig, saveConfig, showReleased, doFetch)
 		},
 	}
+
+	statusCmd.Flags().BoolVar(&showReleased, "show-released", false, "Show PRs that are completely released")
+	statusCmd.Flags().BoolVar(&doFetch, "fetch", false, "Fetch latest data from GitHub before showing status")
 
 	return statusCmd
 }
 
-func runStatus(configFile string, loadConfig func(string) (*cmd.Config, error)) error {
+func runStatus(ctx context.Context, configFile string, loadConfig func(string) (*cmd.Config, error), saveConfig func(string, *cmd.Config) error, showReleased bool, doFetch bool) error {
 	config, err := loadConfig(configFile)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Run fetch if requested
+	if doFetch {
+		if err := fetch.ExecuteFetch(ctx, configFile, config, saveConfig); err != nil {
+			return fmt.Errorf("fetch failed: %w", err)
+		}
+		// Reload config after fetch to get updated data
+		config, err = loadConfig(configFile)
+		if err != nil {
+			return fmt.Errorf("failed to reload config after fetch: %w", err)
+		}
 	}
 
 	if len(config.TrackedPRs) == 0 {
@@ -36,12 +57,48 @@ func runStatus(configFile string, loadConfig func(string) (*cmd.Config, error)) 
 		return nil
 	}
 
-	sortPRsByNumber(config.TrackedPRs)
+	// Filter out completely released PRs unless showReleased is true
+	prsToDisplay := config.TrackedPRs
+	if !showReleased {
+		prsToDisplay = filterNonReleasedPRs(config.TrackedPRs)
+	}
+
+	if len(prsToDisplay) == 0 {
+		fmt.Println("No active PRs. All PRs are released.")
+		fmt.Println("Use --show-released to see released PRs.")
+		return nil
+	}
+
+	sortPRsByNumber(prsToDisplay)
 	displayRepositoryHeader(config)
-	displayAllPRStatuses(config.TrackedPRs, config, configFile)
-	displayStatusSummary(config.TrackedPRs)
+	displayAllPRStatuses(prsToDisplay, config, configFile)
+	displayStatusSummary(prsToDisplay)
 
 	return nil
+}
+
+// filterNonReleasedPRs filters out PRs that are completely released (all branches have status "released")
+func filterNonReleasedPRs(prs []cmd.TrackedPR) []cmd.TrackedPR {
+	var filtered []cmd.TrackedPR
+	for _, pr := range prs {
+		if !isCompletelyReleased(pr) {
+			filtered = append(filtered, pr)
+		}
+	}
+	return filtered
+}
+
+// isCompletelyReleased checks if all branches of a PR have status "released"
+func isCompletelyReleased(pr cmd.TrackedPR) bool {
+	if len(pr.Branches) == 0 {
+		return false
+	}
+	for _, status := range pr.Branches {
+		if status.Status != cmd.BranchStatusReleased {
+			return false
+		}
+	}
+	return true
 }
 
 // sortPRsByNumber sorts PRs by number for consistent output
@@ -171,6 +228,11 @@ func displayBranchStatus(branch string, status cmd.BranchStatus, config *cmd.Con
 			ciInfo := getCIStatusInfo(status.PR.CIStatus, executablePath, configFlag, prNumber, branch)
 
 			fmt.Printf(" [%s]", ciInfo.indicator)
+
+			// Show run attempt if available
+			if status.PR.RunAttempt > 0 {
+				fmt.Printf(" [run attempt %d]", status.PR.RunAttempt)
+			}
 			fmt.Println()
 
 			// Show suggested command if available

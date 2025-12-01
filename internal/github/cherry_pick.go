@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"slices"
 
@@ -14,6 +15,7 @@ import (
 //   - Success: "🍒 Cherry-pick PR created for 3.7: #14944"
 //   - Failure: "Cherry-pick failed for 3.7" or similar failure messages
 func (c *Client) GetCherryPickPRsFromComments(ctx context.Context, prNumber int) ([]CherryPickPR, error) {
+	slog.Debug("GitHub API: Listing comments", "org", c.org, "repo", c.repo, "pr", prNumber)
 	comments, _, err := c.client.Issues.ListComments(ctx, c.org, c.repo, prNumber, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch comments for PR #%d: %w", prNumber, err)
@@ -83,6 +85,7 @@ func (c *Client) SearchManualCherryPickPRs(ctx context.Context, prNumber int, br
 		},
 	}
 
+	slog.Debug("GitHub API: Searching for manual cherry-pick PRs", "org", c.org, "repo", c.repo, "pr", prNumber, "query", query)
 	result, _, err := c.client.Search.Issues(ctx, query, opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search for manual cherry-pick PRs: %w", err)
@@ -107,6 +110,7 @@ func (c *Client) SearchManualCherryPickPRs(ctx context.Context, prNumber int, br
 		}
 
 		// Get the full PR to determine target branch
+		slog.Debug("GitHub API: Getting PR details for manual cherry-pick", "org", c.org, "repo", c.repo, "pr", issue.GetNumber())
 		pr, _, err := c.client.PullRequests.Get(ctx, c.org, c.repo, issue.GetNumber())
 		if err != nil {
 			continue

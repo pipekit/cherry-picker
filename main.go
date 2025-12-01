@@ -39,7 +39,7 @@ across GitHub repositories using a YAML configuration file to track state.`,
 	// Create commands with access to the global config file
 	rootCmd.AddCommand(configcmd.NewConfigCmd(&configFile, config.LoadConfig, config.SaveConfig))
 	rootCmd.AddCommand(fetchcmd.NewFetchCmd(&configFile, config.LoadConfig, config.SaveConfig))
-	rootCmd.AddCommand(status.NewStatusCmd(&configFile, config.LoadConfig))
+	rootCmd.AddCommand(status.NewStatusCmd(&configFile, config.LoadConfig, config.SaveConfig))
 	rootCmd.AddCommand(pick.NewPickCmd(&configFile, config.LoadConfig, config.SaveConfig))
 	rootCmd.AddCommand(retry.NewRetryCmd(config.LoadConfig, config.SaveConfig))
 	rootCmd.AddCommand(merge.NewMergeCmd(config.LoadConfig, config.SaveConfig))

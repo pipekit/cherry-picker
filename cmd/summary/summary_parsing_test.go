@@ -67,6 +67,11 @@ func TestParseCherryPickCommit(t *testing.T) {
 			message:  "fix: some fix (#1234) (cherry-pick main) (#5678)",
 			expected: &CherryPickInfo{OriginalPR: "1234", CherryPickPR: "5678"},
 		},
+		{
+			name:     "cherry-pick with PR number in cherry-pick reference",
+			message:  "fix: cache calls to prevent exponential recursion. Fixes #14904 (cherry-pick #14920 for 3.7) (#14988)",
+			expected: &CherryPickInfo{OriginalPR: "14920", CherryPickPR: "14988"},
+		},
 	}
 
 	for _, tt := range tests {

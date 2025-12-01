@@ -92,7 +92,8 @@ type BranchStatus struct {
 
 // PickPR represents the PR that was cherry-picked
 type PickPR struct {
-	Number   int      `yaml:"number"`
-	CIStatus CIStatus `yaml:"ci_status"`
-	Title    string   `yaml:"title"`
+	Number     int      `yaml:"number"`
+	CIStatus   CIStatus `yaml:"ci_status"`
+	Title      string   `yaml:"title"`
+	RunAttempt int      `yaml:"run_attempt,omitempty"` // Maximum run_attempt from workflow runs (1 = first run, 2 = one retry, etc.)
 }

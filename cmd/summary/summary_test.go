@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/alan/cherry-picker/cmd"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewSummaryCmd(t *testing.T) {
@@ -14,10 +15,7 @@ func TestNewSummaryCmd(t *testing.T) {
 		}
 
 		cobraCmd := NewSummaryCmd(&configFile, loadConfig)
-
-		if cobraCmd == nil {
-			t.Fatal("NewSummaryCmd() returned nil")
-		}
+		require.NotNil(t, cobraCmd)
 
 		if cobraCmd.Use != "summary <target-branch>" {
 			t.Errorf("NewSummaryCmd().Use = %q, want %q", cobraCmd.Use, "summary <target-branch>")
@@ -31,6 +29,7 @@ func TestNewSummaryCmd(t *testing.T) {
 		}
 
 		cobraCmd := NewSummaryCmd(&configFile, loadConfig)
+		require.NotNil(t, cobraCmd)
 
 		expectedShort := "Generate development progress summary for a branch"
 		if cobraCmd.Short != expectedShort {
@@ -45,6 +44,7 @@ func TestNewSummaryCmd(t *testing.T) {
 		}
 
 		cobraCmd := NewSummaryCmd(&configFile, loadConfig)
+		require.NotNil(t, cobraCmd)
 
 		// Test with no arguments
 		err := cobraCmd.Args(cobraCmd, []string{})
@@ -72,6 +72,7 @@ func TestNewSummaryCmd(t *testing.T) {
 		}
 
 		cobraCmd := NewSummaryCmd(&configFile, loadConfig)
+		require.NotNil(t, cobraCmd)
 
 		if !cobraCmd.SilenceUsage {
 			t.Error("NewSummaryCmd().SilenceUsage should be true")
