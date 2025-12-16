@@ -252,6 +252,16 @@ func (c *Client) getPRRunAttempt(ctx context.Context, sha string) (int, error) {
 	return checker.GetRunAttempt(ctx, sha)
 }
 
+// GetPRHeadBranch returns the head branch name for a PR (used for force pushing)
+func (c *Client) GetPRHeadBranch(ctx context.Context, number int) (string, error) {
+	slog.Debug("GitHub API: Getting PR head branch", "org", c.org, "repo", c.repo, "pr", number)
+	pr, _, err := c.client.PullRequests.Get(ctx, c.org, c.repo, number)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch PR #%d: %w", number, err)
+	}
+	return pr.GetHead().GetRef(), nil
+}
+
 // CreatePR creates a new pull request
 func (c *Client) CreatePR(ctx context.Context, title, body, head, base string) (int, error) {
 	newPR := &github.NewPullRequest{

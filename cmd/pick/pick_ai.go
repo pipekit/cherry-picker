@@ -85,3 +85,60 @@ Please start by examining the conflicted files and let me know what you see.`,
 
 	return prompt
 }
+
+// launchAmendAIAssistant launches AI assistant for amending an existing cherry-pick PR
+func (pc *command) launchAmendAIAssistant(prNumber int, targetBranch, originalTitle string) error {
+	if pc.Config.AIAssistantCommand == "" {
+		return fmt.Errorf("AI assistant command not configured. Set it using: cherry-picker config --ai-assistant <command>")
+	}
+
+	prompt := pc.createAmendPrompt(prNumber, targetBranch, originalTitle)
+
+	fmt.Printf("Amending existing cherry-pick PR #%d\n", prNumber)
+	fmt.Printf("You are now on the PR's branch and can make changes.\n\n")
+
+	separator := strings.Repeat("=", 80)
+	fmt.Printf("\n%s\n", separator)
+	fmt.Printf("%s\n", prompt)
+	fmt.Printf("%s\n\n", separator)
+
+	fmt.Printf("Starting %s session...\n", pc.Config.AIAssistantCommand)
+	fmt.Printf("Copy the context above to start. Press Enter to launch...\n")
+	_, _ = fmt.Scanln()
+
+	cmd := exec.Command(pc.Config.AIAssistantCommand) //nolint:gosec // AI assistant command is user-configured
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%s failed: %w", pc.Config.AIAssistantCommand, err)
+	}
+
+	return nil
+}
+
+// createAmendPrompt creates a prompt for amending an existing cherry-pick PR
+func (*command) createAmendPrompt(prNumber int, targetBranch, originalTitle string) string {
+	return fmt.Sprintf(`I need help amending an existing cherry-pick PR. Here's the situation:
+
+**Context:**
+- Existing cherry-pick PR: #%d
+- Target branch: %s
+- Original PR title: %s
+
+**What I need:**
+This cherry-pick PR was created by a bot but needs manual amendments. Common reasons include:
+- CI failures that need code fixes
+- Reviewer feedback requiring changes
+- Additional modifications needed for this release branch
+
+**How you can help:**
+- Examine the current state of the code on this branch
+- Help me understand what changes are needed
+- Make the necessary modifications
+- Ensure the changes are committed properly
+
+When done, exit the session. The changes will be force-pushed to update the existing PR.`,
+		prNumber, targetBranch, originalTitle)
+}

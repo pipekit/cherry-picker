@@ -245,3 +245,43 @@ func (*command) isConflictError(err error) bool {
 
 	return false
 }
+
+// fetchPRBranch fetches a PR's head branch using GitHub's PR ref and checks it out
+func (*command) fetchPRBranch(prNumber int) error {
+	localBranch := fmt.Sprintf("pr-%d", prNumber)
+	refSpec := fmt.Sprintf("pull/%d/head:%s", prNumber, localBranch)
+
+	slog.Info("Fetching PR branch", "pr", prNumber, "local_branch", localBranch)
+
+	// Delete local branch if exists (to ensure fresh fetch)
+	deleteCmd := exec.Command("git", "branch", "-D", localBranch) //nolint:gosec // PR number is from tracked config
+	_ = deleteCmd.Run()                                           // Ignore error if branch doesn't exist
+
+	fetchCmd := exec.Command("git", "fetch", "origin", refSpec) //nolint:gosec // PR number is from tracked config
+	fetchCmd.Stdout = os.Stdout
+	fetchCmd.Stderr = os.Stderr
+	if err := fetchCmd.Run(); err != nil {
+		return fmt.Errorf("failed to fetch PR #%d: %w", prNumber, err)
+	}
+
+	// Checkout the fetched branch
+	slog.Info("Checking out fetched PR branch", "branch", localBranch)
+	checkoutCmd := exec.Command("git", "checkout", localBranch) //nolint:gosec // PR number is from tracked config
+	checkoutCmd.Stdout = os.Stdout
+	checkoutCmd.Stderr = os.Stderr
+	if err := checkoutCmd.Run(); err != nil {
+		return fmt.Errorf("failed to checkout pr-%d: %w", prNumber, err)
+	}
+
+	return nil
+}
+
+// forcePushBranch force pushes a local branch to a remote branch
+func (*command) forcePushBranch(localBranch, remoteBranch string) error {
+	slog.Info("Force pushing branch", "local", localBranch, "remote", remoteBranch)
+	refSpec := fmt.Sprintf("%s:%s", localBranch, remoteBranch)
+	cmd := exec.Command("git", "push", "--force", "origin", refSpec) //nolint:gosec // Branch names are from tracked config
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
