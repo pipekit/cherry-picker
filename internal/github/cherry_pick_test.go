@@ -1,6 +1,7 @@
 package github
 
 import (
+	"fmt"
 	"regexp"
 	"testing"
 
@@ -186,6 +187,171 @@ func TestManualCherryPickTitlePattern(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			matches := pattern.MatchString(tt.title)
 			assert.Equal(t, tt.shouldMatch, matches, "title: %s", tt.title)
+		})
+	}
+}
+
+func TestManualCherryPickTitleWithBranchPattern(t *testing.T) {
+	// Test the enhanced pattern that extracts branch from title
+	// Pattern matches "(cherry-pick #14894 for 3.7)" and extracts the version
+	prNumber := 15061
+	pattern := regexp.MustCompile(fmt.Sprintf(`(?i)cherry-pick\s+#?%d\s+for\s+([0-9.]+)`, prNumber))
+
+	tests := []struct {
+		name            string
+		title           string
+		shouldMatch     bool
+		expectedVersion string
+	}{
+		{
+			name:            "standard format with hash and parentheses",
+			title:           "fix: some bug (cherry-pick #15061 for 3.7)",
+			shouldMatch:     true,
+			expectedVersion: "3.7",
+		},
+		{
+			name:            "without parentheses",
+			title:           "cherry-pick #15061 for 3.6",
+			shouldMatch:     true,
+			expectedVersion: "3.6",
+		},
+		{
+			name:            "complex title with multiple cherry-picks",
+			title:           "chore(otel): add support (cherry-pick #15061 for 3.7)(cherry-pick #15067 for 3.7)",
+			shouldMatch:     true,
+			expectedVersion: "3.7",
+		},
+		{
+			name:            "case insensitive",
+			title:           "Fix bug (Cherry-Pick #15061 for 4.0)",
+			shouldMatch:     true,
+			expectedVersion: "4.0",
+		},
+		{
+			name:            "version with patch number",
+			title:           "fix: bug (cherry-pick #15061 for 3.7.1)",
+			shouldMatch:     true,
+			expectedVersion: "3.7.1",
+		},
+		{
+			name:        "different PR number - no match",
+			title:       "fix: bug (cherry-pick #12345 for 3.7)",
+			shouldMatch: false,
+		},
+		{
+			name:        "missing for clause - no match",
+			title:       "fix: bug (cherry-pick #15061)",
+			shouldMatch: false,
+		},
+		{
+			name:        "missing version - no match",
+			title:       "cherry-pick #15061 for release",
+			shouldMatch: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			matches := pattern.FindStringSubmatch(tt.title)
+
+			if tt.shouldMatch {
+				assert.NotNil(t, matches, "should match pattern")
+				assert.Len(t, matches, 2, "should have version capture")
+				assert.Equal(t, tt.expectedVersion, matches[1], "version")
+			} else {
+				assert.Nil(t, matches, "should not match pattern")
+			}
+		})
+	}
+}
+
+func TestCherryPickPRPriorityMerging(t *testing.T) {
+	// Test the priority logic for merging cherry-pick PR results
+	// Non-failures should always win over failures
+	// When both are successes, higher PR number (newer) wins
+
+	tests := []struct {
+		name           string
+		entries        []CherryPickPR
+		expectedNumber int
+		expectedFailed bool
+	}{
+		{
+			name: "failure then success - success wins",
+			entries: []CherryPickPR{
+				{Number: 0, Branch: "release-3.7", Failed: true},
+				{Number: 15083, Branch: "release-3.7", Failed: false},
+			},
+			expectedNumber: 15083,
+			expectedFailed: false,
+		},
+		{
+			name: "success then failure - success preserved",
+			entries: []CherryPickPR{
+				{Number: 15083, Branch: "release-3.7", Failed: false},
+				{Number: 0, Branch: "release-3.7", Failed: true},
+			},
+			expectedNumber: 15083,
+			expectedFailed: false,
+		},
+		{
+			name: "two successes - higher PR number wins",
+			entries: []CherryPickPR{
+				{Number: 15000, Branch: "release-3.7", Failed: false},
+				{Number: 15083, Branch: "release-3.7", Failed: false},
+			},
+			expectedNumber: 15083,
+			expectedFailed: false,
+		},
+		{
+			name: "two successes reverse order - higher PR number wins",
+			entries: []CherryPickPR{
+				{Number: 15083, Branch: "release-3.7", Failed: false},
+				{Number: 15000, Branch: "release-3.7", Failed: false},
+			},
+			expectedNumber: 15083,
+			expectedFailed: false,
+		},
+		{
+			name: "only failure",
+			entries: []CherryPickPR{
+				{Number: 0, Branch: "release-3.7", Failed: true},
+			},
+			expectedNumber: 0,
+			expectedFailed: true,
+		},
+		{
+			name: "multiple failures then success",
+			entries: []CherryPickPR{
+				{Number: 0, Branch: "release-3.7", Failed: true},
+				{Number: 0, Branch: "release-3.7", Failed: true},
+				{Number: 15083, Branch: "release-3.7", Failed: false},
+			},
+			expectedNumber: 15083,
+			expectedFailed: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Simulate the priority merging logic from fetch_tracking.go
+			existingByBranch := make(map[string]CherryPickPR)
+			for _, cp := range tt.entries {
+				existing, exists := existingByBranch[cp.Branch]
+				if !exists {
+					existingByBranch[cp.Branch] = cp
+				} else if existing.Failed && !cp.Failed {
+					// Non-failure always wins over failure
+					existingByBranch[cp.Branch] = cp
+				} else if !existing.Failed && !cp.Failed && cp.Number > existing.Number {
+					// Both successes: prefer higher PR number (newer)
+					existingByBranch[cp.Branch] = cp
+				}
+			}
+
+			result := existingByBranch["release-3.7"]
+			assert.Equal(t, tt.expectedNumber, result.Number, "PR number")
+			assert.Equal(t, tt.expectedFailed, result.Failed, "failed status")
 		})
 	}
 }

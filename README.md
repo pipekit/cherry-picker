@@ -134,6 +134,27 @@ This command handles cherry-picks that failed with the automated bot. It will:
 
 **Note:** This command only works on PRs with `failed` status, meaning the bot attempted cherry-pick but failed (usually due to conflicts). PRs with `pending` status haven't been attempted by the bot yet and should wait for the bot to try first.
 
+### Amend Existing Cherry-Pick PRs
+
+Use `--force` to amend an existing bot-created cherry-pick PR that needs manual fixes:
+
+```bash
+./cherry-picker pick 123 release-1.0 --force
+./cherry-picker pick 123 --force  # Amend all picked branches
+```
+
+This is useful when:
+- CI is failing on a bot-created PR and needs code fixes
+- Reviewers requested changes to the cherry-pick
+- The bot's cherry-pick was incorrect and needs manual correction
+
+The `--force` flag will:
+
+- **Requirement**: PR must have `picked` status with an existing cherry-pick PR
+- Fetch the existing PR branch from GitHub
+- Launch AI assistant to help make amendments
+- Force push to update the existing PR (CI will re-run)
+
 ### Retry Failed CI
 
 Retry failed CI workflows for picked PRs:
@@ -251,8 +272,11 @@ PRs are automatically added based on their `cherry-pick/*` labels. For example, 
 AI-assisted cherry-pick for PRs that bots couldn't handle:
 
 - `--config, -c`: Configuration file path (default: "cherry-picks.yaml")
+- `--force`: Amend an existing bot-created cherry-pick PR instead of creating a new one
 
-This command is specifically for handling cherry-picks with conflicts that the automated bot couldn't resolve. It uses the configured AI assistant (cursor-agent, claude, or custom) for interactive AI-assisted conflict resolution.
+**Normal mode** (without `--force`): For PRs with `failed` status. Creates a new cherry-pick branch and PR with AI-assisted conflict resolution.
+
+**Force mode** (with `--force`): For PRs with `picked` status. Fetches the existing PR branch, allows AI-assisted amendments, and force pushes to update the existing PR.
 
 ### retry
 
@@ -511,8 +535,8 @@ Each tracked PR has per-branch status tracking:
 - **branches**: Map of target branch names to their status:
   - **status**: One of:
     - `pending`: Bot hasn't attempted cherry-pick yet
-    - `failed`: Bot attempted but failed (usually conflicts)
-    - `picked`: Bot successfully created cherry-pick PR
+    - `failed`: Bot attempted but failed (usually conflicts) - use `pick` command
+    - `picked`: Bot successfully created cherry-pick PR - use `pick --force` to amend
     - `merged`: Cherry-pick PR has been merged
   - **pr**: Details of the cherry-pick PR (when status is `picked` or `merged`):
     - **number**: Cherry-pick PR number

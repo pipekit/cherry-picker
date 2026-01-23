@@ -3,25 +3,11 @@ package fetch
 import (
 	"context"
 	"log/slog"
-	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/alan/cherry-picker/cmd"
 	"github.com/alan/cherry-picker/internal/github"
 )
-
-// cherryPickPattern matches the line added by 'git cherry-pick -x'
-// Example: "(cherry picked from commit abc123def456)"
-var cherryPickPattern = regexp.MustCompile(`\(cherry picked from commit ([a-f0-9]+)\)`)
-
-// botCherryPickPattern matches GitHub bot cherry-pick PR format
-// Example: "(cherry-pick #15033 for 3.6)"
-var botCherryPickPattern = regexp.MustCompile(`\(cherry-pick #(\d+) for [\d.]+\)`)
-
-// prNumberPattern matches PR numbers in commit messages
-// Example: "Fix bug (#123)" or "Merge pull request #456"
-var prNumberPattern = regexp.MustCompile(`#(\d+)`)
 
 // updateReleasedStatus checks all releases and marks cherry-pick PRs as released
 func updateReleasedStatus(ctx context.Context, config *cmd.Config, client *github.Client) bool {
@@ -122,7 +108,7 @@ func updateReleasedStatus(ctx context.Context, config *cmd.Config, client *githu
 				branchesChecked[branchName] = br.uncheckedReleases[0].TagName
 			}
 
-			// Check if this cherry-pick PR's commit is in any release
+			// Check if this cherry-pick PR's commit is in any unchecked release
 			if isInRelease(ctx, client, br.uncheckedReleases, br.lastChecked, trackedPR.Number) {
 				slog.Info("Cherry-pick found in release", "pr", trackedPR.Number, "branch", branchName, "cherry_pick_pr", branchStatus.PR.Number)
 				branchStatus.Status = cmd.BranchStatusReleased
@@ -231,27 +217,19 @@ func isInRelease(ctx context.Context, client *github.Client, releases []github.R
 
 // isCherryPickCommit checks if a commit is a cherry-pick of the specified original PR
 func isCherryPickCommit(commit github.Commit, originalPRNumber int) bool {
-	// Check for GitHub bot cherry-pick pattern: "(cherry-pick #15033 for 3.6)"
-	if matches := botCherryPickPattern.FindStringSubmatch(commit.Message); len(matches) > 1 {
-		prNum, err := strconv.Atoi(matches[1])
-		if err == nil && prNum == originalPRNumber {
-			return true
-		}
+	if github.ContainsCherryPickForPR(commit.Message, originalPRNumber) {
+		slog.Debug("Found cherry-pick PR reference in commit", "commit", commit.SHA[:8], "pr", originalPRNumber, "message_start", truncateMessage(commit.Message, 80))
+		return true
 	}
-
-	// Check for manual git cherry-pick marker: "(cherry picked from commit SHA)"
-	if cherryPickPattern.MatchString(commit.Message) {
-		// Also check if the commit message mentions the original PR number
-		matches := prNumberPattern.FindAllStringSubmatch(commit.Message, -1)
-		for _, match := range matches {
-			if len(match) > 1 {
-				prNum, err := strconv.Atoi(match[1])
-				if err == nil && prNum == originalPRNumber {
-					return true
-				}
-			}
-		}
-	}
-
 	return false
+}
+
+// truncateMessage truncates a message to maxLen characters
+func truncateMessage(msg string, maxLen int) string {
+	// Replace newlines with spaces for logging
+	msg = strings.ReplaceAll(msg, "\n", " ")
+	if len(msg) > maxLen {
+		return msg[:maxLen] + "..."
+	}
+	return msg
 }

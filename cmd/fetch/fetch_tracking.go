@@ -163,7 +163,19 @@ func updateAllTrackedPRs(ctx context.Context, config *cmd.Config, client *github
 
 		existingByBranch := make(map[string]github.CherryPickPR)
 		for _, cp := range cherryPickPRs {
-			existingByBranch[cp.Branch] = cp
+			existing, exists := existingByBranch[cp.Branch]
+			if !exists {
+				existingByBranch[cp.Branch] = cp
+			} else if existing.Failed && !cp.Failed {
+				// Non-failure always wins over failure
+				existingByBranch[cp.Branch] = cp
+				slog.Debug("Preferring successful cherry-pick over failure",
+					"branch", cp.Branch, "pr", cp.Number)
+			} else if !existing.Failed && !cp.Failed && cp.Number > existing.Number {
+				// Both successes: prefer higher PR number (newer)
+				existingByBranch[cp.Branch] = cp
+			}
+			// If existing is success and new is failure, keep existing
 		}
 
 		for branch, currentStatus := range trackedPR.Branches {

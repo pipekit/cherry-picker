@@ -21,7 +21,11 @@
       "WebFetch(domain:pkg.go.dev)",
       "WebFetch(domain:docs.github.com)",
       "WebFetch(domain:api.github.com)",
-      "WebFetch(domain:stackoverflow.com)"
+      "WebFetch(domain:stackoverflow.com)",
+      "Bash(git fetch:*)",
+      "Bash(source ../pat.sh)",
+      "Bash(go run .. fetch -l debug)",
+      "Bash(../cherry-picker fetch:*)"
     ],
     "deny": [],
     "ask": []

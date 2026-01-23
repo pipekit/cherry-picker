@@ -14,7 +14,8 @@ import (
 // command encapsulates the fetch command with common functionality
 type command struct {
 	commands.BaseCommand
-	SinceDate string
+	SinceDate        string
+	RecheckReleases  bool
 }
 
 // NewFetchCmd creates and returns the fetch command
@@ -43,6 +44,7 @@ Requires GITHUB_TOKEN environment variable to be set.`,
 	}
 
 	command.Flags().StringVarP(&fetchCmd.SinceDate, "since", "s", "", "Fetch PRs since this date (YYYY-MM-DD), defaults to last fetch date")
+	command.Flags().BoolVar(&fetchCmd.RecheckReleases, "recheck-releases", false, "Force recheck of all releases (clears last_checked_release)")
 
 	return command
 }
@@ -52,6 +54,12 @@ func (fc *command) Run(ctx context.Context) error {
 	since, err := determineSinceDate(fc.SinceDate, fc.Config.LastFetchDate)
 	if err != nil {
 		return err
+	}
+
+	// Clear last checked releases if recheck flag is set
+	if fc.RecheckReleases {
+		fmt.Println("Forcing recheck of all releases")
+		fc.Config.LastCheckedRelease = nil
 	}
 
 	return fetchAndProcessPRs(ctx, *fc.ConfigFile, fc.Config, since, fc.SaveConfig)

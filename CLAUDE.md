@@ -41,8 +41,8 @@ make clean
 - `TrackedPR`: PR tracking with per-branch status
 - `BranchStatus`: Status types (pending, failed, picked, merged) and optional PR details
   - `pending`: Bot hasn't attempted cherry-pick yet
-  - `failed`: Bot attempted but failed (usually conflicts) - **pick command only works on this status**
-  - `picked`: Bot successfully created cherry-pick PR
+  - `failed`: Bot attempted but failed (usually conflicts) - **pick command works on this status**
+  - `picked`: Bot successfully created cherry-pick PR - **pick --force can amend these**
   - `merged`: Cherry-pick PR merged
 - `PickPR`: Cherry-pick PR details including number, title, and CI status
 
@@ -73,9 +73,10 @@ Each command is in its own package with a `New<Command>Cmd()` factory function:
     - `picked`: Bot created PR successfully
     - `merged`: Cherry-pick PR merged
 - **pick**: AI-assisted cherry-pick for PRs that bots couldn't handle (bot failures)
-  - **Only works on PRs with `failed` status** (bot attempted but failed)
-  - Uses configured AI assistant for interactive conflict resolution
-  - Performs git operations and creates cherry-pick PRs
+  - **Normal mode**: Works on PRs with `failed` status (bot attempted but failed)
+  - **Force mode** (`--force`): Amends existing bot-created PRs with `picked` status
+  - Uses configured AI assistant for interactive conflict resolution or amendments
+  - Performs git operations and creates/updates cherry-pick PRs
 - **retry**: Retry failed CI workflows via GitHub Actions API
 - **merge**: Squash merge PRs with passing CI
 - **status**: Display tracked PRs with GitHub API enrichment (CI status, merge status, suggested commands)
@@ -102,6 +103,23 @@ The `pick` command (`cmd/pick/pick.go`) is specifically for handling cherry-pick
 - Failure usually indicates merge conflicts
 - Human intervention with AI assistance is required to resolve conflicts
 - PRs with `pending` status should wait for bot to attempt first
+
+### Force Amend Flow (`pick --force`)
+
+The `--force` flag enables amending existing bot-created cherry-pick PRs that need manual fixes:
+1. **Validate PR has `picked` status** with existing cherry-pick PR number
+2. Fetch existing PR branch via `git fetch origin pull/<number>/head:pr-<number>`
+3. Checkout the fetched branch
+4. Launch AI assistant with amend-specific prompt (different from conflict resolution)
+5. Get remote branch name via GitHub API
+6. Force push to update the existing PR
+7. Save status (CI status reset to `pending` since it will re-run)
+
+**Use cases for `--force`:**
+- CI failures on bot-created PR that need code fixes
+- Reviewer feedback requiring changes
+- Additional modifications needed for the release branch
+- Bot created incorrect cherry-pick that needs manual correction
 
 ### AI Conflict Resolution
 
