@@ -3,10 +3,8 @@ package main
 import (
 	"fmt"
 	"log/slog"
-	"os/exec"
-	"regexp"
-	"strings"
 
+	"github.com/alan/cherry-picker/internal/git"
 	"github.com/spf13/cobra"
 )
 
@@ -108,56 +106,7 @@ func loadOrCreateConfig(configFile string) (*Config, bool) {
 	return &Config{}, false
 }
 
-// gitRepoInfo holds detected git repository information
-type gitRepoInfo struct {
-	Org  string
-	Repo string
-}
-
-func detectGitRepoInfo() (*gitRepoInfo, error) {
-	if !isGitRepository() {
-		return nil, fmt.Errorf("not in a git repository")
-	}
-
-	org, repo, err := parseGitRemote()
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse git remote: %w", err)
-	}
-
-	return &gitRepoInfo{
-		Org:  org,
-		Repo: repo,
-	}, nil
-}
-
-func isGitRepository() bool {
-	gitCmd := exec.Command("git", "rev-parse", "--git-dir")
-	return gitCmd.Run() == nil
-}
-
-func parseGitRemote() (string, string, error) {
-	gitCmd := exec.Command("git", "remote", "get-url", "origin")
-	output, err := gitCmd.Output()
-	if err != nil {
-		return "", "", err
-	}
-
-	remoteURL := strings.TrimSpace(string(output))
-	return parseRemoteURL(remoteURL)
-}
-
-func parseRemoteURL(remoteURL string) (string, string, error) {
-	// Handle SSH format: git@github.com:org/repo.git
-	sshRegex := regexp.MustCompile(`git@github\.com:([^/]+)/([^/]+?)(?:\.git)?$`)
-	if matches := sshRegex.FindStringSubmatch(remoteURL); len(matches) == 3 {
-		return matches[1], matches[2], nil
-	}
-
-	// Handle HTTPS format: https://github.com/org/repo.git
-	httpsRegex := regexp.MustCompile(`https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$`)
-	if matches := httpsRegex.FindStringSubmatch(remoteURL); len(matches) == 3 {
-		return matches[1], matches[2], nil
-	}
-
-	return "", "", fmt.Errorf("unable to parse GitHub remote URL: %s", remoteURL)
+// detectGitRepoInfo attempts to detect git repository information
+func detectGitRepoInfo() (*git.RepoInfo, error) {
+	return git.DetectRepoInfo()
 }

@@ -1,35 +1,25 @@
 // Package main defines core data structures for dep-merger configuration and PR tracking.
 package main
 
-import "time"
+import (
+	"time"
 
-// CIStatus represents the status of CI checks
-type CIStatus string
-
-const (
-	// CIStatusPassing indicates all CI checks have passed
-	CIStatusPassing CIStatus = "passing"
-	// CIStatusFailing indicates one or more CI checks have failed
-	CIStatusFailing CIStatus = "failing"
-	// CIStatusPending indicates CI checks are still running
-	CIStatusPending CIStatus = "pending"
-	// CIStatusUnknown indicates CI status could not be determined
-	CIStatusUnknown CIStatus = "unknown"
+	"github.com/alan/cherry-picker/internal/types"
 )
 
-// ParseCIStatus converts a string to CIStatus
-func ParseCIStatus(s string) CIStatus {
-	switch s {
-	case "passing":
-		return CIStatusPassing
-	case "failing":
-		return CIStatusFailing
-	case "pending":
-		return CIStatusPending
-	default:
-		return CIStatusUnknown
-	}
-}
+// CIStatus is an alias for types.CIStatus for backward compatibility
+type CIStatus = types.CIStatus
+
+// CI status constants from internal/types package
+const (
+	CIStatusPassing = types.CIStatusPassing
+	CIStatusFailing = types.CIStatusFailing
+	CIStatusPending = types.CIStatusPending
+	CIStatusUnknown = types.CIStatusUnknown
+)
+
+// ParseCIStatus is an alias for types.ParseCIStatus
+var ParseCIStatus = types.ParseCIStatus
 
 // Config represents the structure of dep-merger.yaml
 type Config struct {

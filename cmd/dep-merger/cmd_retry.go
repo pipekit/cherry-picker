@@ -39,12 +39,12 @@ Examples:
 				}
 			}
 
-			return runRetry(cmd.Context(), *globalConfigFile, config, prNumber)
+			return runRetry(cmd.Context(), config, prNumber)
 		},
 	}
 }
 
-func runRetry(ctx context.Context, _ string, config *Config, prNumber int) error {
+func runRetry(ctx context.Context, config *Config, prNumber int) error {
 	client, err := initGitHubClient(ctx, config)
 	if err != nil {
 		return err
@@ -52,34 +52,18 @@ func runRetry(ctx context.Context, _ string, config *Config, prNumber int) error
 
 	if prNumber != 0 {
 		// Retry specific PR
-		pr := findTrackedPR(config, prNumber)
-		if pr == nil {
-			return fmt.Errorf("PR #%d is not tracked (run 'dep-merger fetch' first)", prNumber)
-		}
-		if pr.Merged {
-			return fmt.Errorf("PR #%d is already merged", prNumber)
-		}
-		if pr.CIStatus != CIStatusFailing {
-			return fmt.Errorf("PR #%d does not have failing CI (status: %s)", prNumber, pr.CIStatus)
+		pr, err := validatePRForOperation(config, prNumber, CIStatusFailing, "retry")
+		if err != nil {
+			return err
 		}
 
 		return retrySinglePR(ctx, client, pr)
 	}
 
 	// Retry all PRs with failing CI
-	var retried int
-	for i := range config.TrackedPRs {
-		pr := &config.TrackedPRs[i]
-		if pr.Merged || pr.CIStatus != CIStatusFailing {
-			continue
-		}
-
-		if err := retrySinglePR(ctx, client, pr); err != nil {
-			slog.Error("Failed to retry PR", "pr", pr.Number, "error", err)
-			continue
-		}
-		retried++
-	}
+	retried := executeBulkPROperation(ctx, config, CIStatusFailing, func(ctx context.Context, pr *TrackedPR) error {
+		return retrySinglePR(ctx, client, pr)
+	}, "retry")
 
 	if retried == 0 {
 		fmt.Println("No PRs with failing CI found to retry.")

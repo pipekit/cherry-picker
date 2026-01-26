@@ -23,8 +23,9 @@ func TestNewRetryCmd(t *testing.T) {
 	saveConfig := func(_ string, _ *cmd.Config) error {
 		return nil
 	}
+	configFile := "cherry-picks.yaml"
 
-	cobraCmd := NewRetryCmd(loadConfig, saveConfig)
+	cobraCmd := NewRetryCmd(&configFile, loadConfig, saveConfig)
 
 	assert.NotNil(t, cobraCmd)
 	assert.NotEmpty(t, cobraCmd.Use)
@@ -45,8 +46,9 @@ func TestRetryCmd_RunE_InvalidPRNumber(t *testing.T) {
 	saveConfig := func(_ string, _ *cmd.Config) error {
 		return nil
 	}
+	configFile := "cherry-picks.yaml"
 
-	cobraCmd := NewRetryCmd(loadConfig, saveConfig)
+	cobraCmd := NewRetryCmd(&configFile, loadConfig, saveConfig)
 
 	// Test with invalid PR number - should error
 	err := cobraCmd.RunE(cobraCmd, []string{"invalid"})
@@ -63,8 +65,9 @@ func TestRetryCmd_RunE_ConfigLoadError(t *testing.T) {
 	saveConfig := func(_ string, _ *cmd.Config) error {
 		return nil
 	}
+	configFile := "cherry-picks.yaml"
 
-	cobraCmd := NewRetryCmd(loadConfig, saveConfig)
+	cobraCmd := NewRetryCmd(&configFile, loadConfig, saveConfig)
 
 	err := cobraCmd.RunE(cobraCmd, []string{})
 	require.Error(t, err)
@@ -192,20 +195,10 @@ func TestCommand_RetriesCorrectPR(t *testing.T) {
 	assert.Equal(t, 456, branchStatus.PR.Number, "should target cherry-pick PR, not original")
 }
 
-// TestCommandFlags tests that the command has the expected flags
-func TestCommandFlags(t *testing.T) {
-	cobraCmd := NewRetryCmd(nil, nil)
-
-	// Check that the config flag exists
-	configFlag := cobraCmd.Flags().Lookup("config")
-	assert.NotNil(t, configFlag)
-	assert.Equal(t, "cherry-picks.yaml", configFlag.DefValue)
-	assert.Equal(t, "Path to configuration file", configFlag.Usage)
-}
-
 // TestCommandOutput tests command output formatting
 func TestCommandOutput(t *testing.T) {
-	cobraCmd := NewRetryCmd(nil, nil)
+	configFile := "cherry-picks.yaml"
+	cobraCmd := NewRetryCmd(&configFile, nil, nil)
 
 	// Test help output
 	var buf bytes.Buffer

@@ -27,7 +27,8 @@
       "Bash(go run .. fetch -l debug)",
       "Bash(../cherry-picker fetch:*)",
       "Bash(tree:*)",
-      "Bash(go vet:*)"
+      "Bash(go vet:*)",
+      "Bash(wc:*)"
     ],
     "deny": [],
     "ask": []

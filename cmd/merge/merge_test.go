@@ -23,8 +23,9 @@ func TestNewMergeCmd(t *testing.T) {
 	saveConfig := func(_ string, _ *cmd.Config) error {
 		return nil
 	}
+	configFile := "cherry-picks.yaml"
 
-	cobraCmd := NewMergeCmd(loadConfig, saveConfig)
+	cobraCmd := NewMergeCmd(&configFile, loadConfig, saveConfig)
 
 	assert.NotNil(t, cobraCmd)
 	assert.NotEmpty(t, cobraCmd.Use)
@@ -45,8 +46,9 @@ func TestMergeCmd_RunE_InvalidPRNumber(t *testing.T) {
 	saveConfig := func(_ string, _ *cmd.Config) error {
 		return nil
 	}
+	configFile := "cherry-picks.yaml"
 
-	cobraCmd := NewMergeCmd(loadConfig, saveConfig)
+	cobraCmd := NewMergeCmd(&configFile, loadConfig, saveConfig)
 
 	// Test with invalid PR number - should error
 	err := cobraCmd.RunE(cobraCmd, []string{"invalid"})
@@ -63,8 +65,9 @@ func TestMergeCmd_RunE_ConfigLoadError(t *testing.T) {
 	saveConfig := func(_ string, _ *cmd.Config) error {
 		return nil
 	}
+	configFile := "cherry-picks.yaml"
 
-	cobraCmd := NewMergeCmd(loadConfig, saveConfig)
+	cobraCmd := NewMergeCmd(&configFile, loadConfig, saveConfig)
 
 	err := cobraCmd.RunE(cobraCmd, []string{})
 	require.Error(t, err)
@@ -159,20 +162,10 @@ func TestMergeCommand_Run_BranchNotTracked(t *testing.T) {
 	require.Error(t, err)
 }
 
-// TestMergeCommandFlags tests that the command has the expected flags
-func TestMergeCommandFlags(t *testing.T) {
-	cobraCmd := NewMergeCmd(nil, nil)
-
-	// Check that the config flag exists
-	configFlag := cobraCmd.Flags().Lookup("config")
-	assert.NotNil(t, configFlag)
-	assert.Equal(t, "cherry-picks.yaml", configFlag.DefValue)
-	assert.Equal(t, "Path to configuration file", configFlag.Usage)
-}
-
 // TestMergeCommandOutput tests command output formatting
 func TestMergeCommandOutput(t *testing.T) {
-	cobraCmd := NewMergeCmd(nil, nil)
+	configFile := "cherry-picks.yaml"
+	cobraCmd := NewMergeCmd(&configFile, nil, nil)
 
 	// Test help output
 	var buf bytes.Buffer

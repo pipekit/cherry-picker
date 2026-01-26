@@ -20,9 +20,8 @@ type command struct {
 }
 
 // NewRetryCmd creates the retry command
-func NewRetryCmd(loadConfig func(string) (*cmd.Config, error), saveConfig func(string, *cmd.Config) error) *cobra.Command {
+func NewRetryCmd(globalConfigFile *string, loadConfig func(string) (*cmd.Config, error), saveConfig func(string, *cmd.Config) error) *cobra.Command {
 	retryCmd := &command{}
-	var configFile string
 
 	cobraCmd := &cobra.Command{
 		Use:   "retry [pr-number] [target-branch]",
@@ -48,7 +47,7 @@ Examples:
 			retryCmd.TargetBranch = commands.GetTargetBranchFromArgs(args)
 
 			// Initialize base command
-			retryCmd.ConfigFile = &configFile
+			retryCmd.ConfigFile = globalConfigFile
 			retryCmd.LoadConfig = loadConfig
 			retryCmd.SaveConfig = saveConfig
 			if err := retryCmd.Init(cobraCmd.Context()); err != nil {
@@ -58,8 +57,6 @@ Examples:
 			return retryCmd.Run(cobraCmd.Context())
 		},
 	}
-
-	cobraCmd.Flags().StringVar(&configFile, "config", "cherry-picks.yaml", "Path to configuration file")
 
 	return cobraCmd
 }

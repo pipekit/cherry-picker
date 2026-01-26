@@ -53,15 +53,9 @@ func runMerge(ctx context.Context, configFile string, config *Config, prNumber i
 
 	if prNumber != 0 {
 		// Merge specific PR
-		pr := findTrackedPR(config, prNumber)
-		if pr == nil {
-			return fmt.Errorf("PR #%d is not tracked (run 'dep-merger fetch' first)", prNumber)
-		}
-		if pr.Merged {
-			return fmt.Errorf("PR #%d is already merged", prNumber)
-		}
-		if pr.CIStatus != CIStatusPassing {
-			return fmt.Errorf("PR #%d does not have passing CI (status: %s)", prNumber, pr.CIStatus)
+		pr, err := validatePRForOperation(config, prNumber, CIStatusPassing, "merge")
+		if err != nil {
+			return err
 		}
 
 		if err := mergeSinglePR(ctx, client, pr); err != nil {
@@ -72,19 +66,9 @@ func runMerge(ctx context.Context, configFile string, config *Config, prNumber i
 	}
 
 	// Merge all PRs with passing CI
-	var merged int
-	for i := range config.TrackedPRs {
-		pr := &config.TrackedPRs[i]
-		if pr.Merged || pr.CIStatus != CIStatusPassing {
-			continue
-		}
-
-		if err := mergeSinglePR(ctx, client, pr); err != nil {
-			slog.Error("Failed to merge PR", "pr", pr.Number, "error", err)
-			continue
-		}
-		merged++
-	}
+	merged := executeBulkPROperation(ctx, config, CIStatusPassing, func(ctx context.Context, pr *TrackedPR) error {
+		return mergeSinglePR(ctx, client, pr)
+	}, "merge")
 
 	if merged == 0 {
 		fmt.Println("No PRs with passing CI found to merge.")

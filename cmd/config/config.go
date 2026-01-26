@@ -5,11 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"os/exec"
-	"regexp"
-	"strings"
-
 	"github.com/alan/cherry-picker/cmd"
+	"github.com/alan/cherry-picker/internal/git"
 	"github.com/spf13/cobra"
 )
 
@@ -175,83 +172,7 @@ func updateConfigWithProvidedValues(config *cmd.Config, org, repo, sourceBranch,
 	}
 }
 
-// GitRepoInfo holds detected git repository information
-type GitRepoInfo struct {
-	Org          string
-	Repo         string
-	SourceBranch string
-}
-
 // detectGitRepoInfo attempts to detect git repository information
-func detectGitRepoInfo() (*GitRepoInfo, error) {
-	if !isGitRepository() {
-		return nil, fmt.Errorf("not in a git repository")
-	}
-
-	org, repo, err := parseGitRemote()
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse git remote: %w", err)
-	}
-
-	sourceBranch, err := getCurrentBranch()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get current branch: %w", err)
-	}
-
-	return &GitRepoInfo{
-		Org:          org,
-		Repo:         repo,
-		SourceBranch: sourceBranch,
-	}, nil
-}
-
-// isGitRepository checks if current directory is in a git repository
-func isGitRepository() bool {
-	gitCmd := exec.Command("git", "rev-parse", "--git-dir")
-	return gitCmd.Run() == nil
-}
-
-// parseGitRemote extracts org and repo from git remote origin
-func parseGitRemote() (string, string, error) {
-	gitCmd := exec.Command("git", "remote", "get-url", "origin")
-	output, err := gitCmd.Output()
-	if err != nil {
-		return "", "", err
-	}
-
-	remoteURL := strings.TrimSpace(string(output))
-	return parseRemoteURL(remoteURL)
-}
-
-// parseRemoteURL extracts org and repo from various GitHub URL formats
-func parseRemoteURL(remoteURL string) (string, string, error) {
-	// Handle SSH format: git@github.com:org/repo.git
-	sshRegex := regexp.MustCompile(`git@github\.com:([^/]+)/([^/]+?)(?:\.git)?$`)
-	if matches := sshRegex.FindStringSubmatch(remoteURL); len(matches) == 3 {
-		return matches[1], matches[2], nil
-	}
-
-	// Handle HTTPS format: https://github.com/org/repo.git
-	httpsRegex := regexp.MustCompile(`https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$`)
-	if matches := httpsRegex.FindStringSubmatch(remoteURL); len(matches) == 3 {
-		return matches[1], matches[2], nil
-	}
-
-	return "", "", fmt.Errorf("unable to parse GitHub remote URL: %s", remoteURL)
-}
-
-// getCurrentBranch gets the current git branch name
-func getCurrentBranch() (string, error) {
-	gitCmd := exec.Command("git", "branch", "--show-current")
-	output, err := gitCmd.Output()
-	if err != nil {
-		return "", err
-	}
-
-	branch := strings.TrimSpace(string(output))
-	if branch == "" {
-		return "", fmt.Errorf("unable to determine current branch")
-	}
-
-	return branch, nil
+func detectGitRepoInfo() (*git.RepoInfo, error) {
+	return git.DetectRepoInfo()
 }

@@ -41,8 +41,8 @@ across GitHub repositories using a YAML configuration file to track state.`,
 	rootCmd.AddCommand(fetchcmd.NewFetchCmd(&configFile, config.LoadConfig, config.SaveConfig))
 	rootCmd.AddCommand(status.NewStatusCmd(&configFile, config.LoadConfig, config.SaveConfig))
 	rootCmd.AddCommand(pick.NewPickCmd(&configFile, config.LoadConfig, config.SaveConfig))
-	rootCmd.AddCommand(retry.NewRetryCmd(config.LoadConfig, config.SaveConfig))
-	rootCmd.AddCommand(merge.NewMergeCmd(config.LoadConfig, config.SaveConfig))
+	rootCmd.AddCommand(retry.NewRetryCmd(&configFile, config.LoadConfig, config.SaveConfig))
+	rootCmd.AddCommand(merge.NewMergeCmd(&configFile, config.LoadConfig, config.SaveConfig))
 	rootCmd.AddCommand(summary.NewSummaryCmd(&configFile, config.LoadConfig))
 
 	if err := rootCmd.Execute(); err != nil {

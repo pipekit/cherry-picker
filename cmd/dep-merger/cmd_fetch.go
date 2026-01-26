@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/alan/cherry-picker/internal/github"
@@ -104,24 +103,6 @@ func runFetch(ctx context.Context, configFile string, config *Config) error {
 	}
 
 	fmt.Printf("Fetch complete: %d new, %d updated\n", newCount, updatedCount)
-	return nil
-}
-
-func initGitHubClient(ctx context.Context, config *Config) (*github.Client, error) {
-	token := os.Getenv("GITHUB_TOKEN")
-	if token == "" {
-		return nil, fmt.Errorf("GITHUB_TOKEN environment variable is required")
-	}
-
-	return github.NewClient(ctx, token).WithRepository(config.Org, config.Repo), nil
-}
-
-func findTrackedPR(config *Config, number int) *TrackedPR {
-	for i := range config.TrackedPRs {
-		if config.TrackedPRs[i].Number == number {
-			return &config.TrackedPRs[i]
-		}
-	}
 	return nil
 }
 

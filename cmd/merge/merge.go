@@ -20,9 +20,8 @@ type command struct {
 }
 
 // NewMergeCmd creates the merge command
-func NewMergeCmd(loadConfig func(string) (*cmd.Config, error), saveConfig func(string, *cmd.Config) error) *cobra.Command {
+func NewMergeCmd(globalConfigFile *string, loadConfig func(string) (*cmd.Config, error), saveConfig func(string, *cmd.Config) error) *cobra.Command {
 	mergeCmd := &command{}
-	var configFile string
 
 	cobraCmd := &cobra.Command{
 		Use:   "merge [pr-number] [target-branch]",
@@ -49,7 +48,7 @@ Examples:
 			mergeCmd.TargetBranch = commands.GetTargetBranchFromArgs(args)
 
 			// Initialize base command
-			mergeCmd.ConfigFile = &configFile
+			mergeCmd.ConfigFile = globalConfigFile
 			mergeCmd.LoadConfig = loadConfig
 			mergeCmd.SaveConfig = saveConfig
 			if err := mergeCmd.Init(cobraCmd.Context()); err != nil {
@@ -59,8 +58,6 @@ Examples:
 			return mergeCmd.Run(cobraCmd.Context())
 		},
 	}
-
-	cobraCmd.Flags().StringVar(&configFile, "config", "cherry-picks.yaml", "Path to configuration file")
 
 	return cobraCmd
 }
