@@ -14,8 +14,8 @@ import (
 // command encapsulates the fetch command with common functionality
 type command struct {
 	commands.BaseCommand
-	SinceDate        string
-	RecheckReleases  bool
+	SinceDate       string
+	RecheckReleases bool
 }
 
 // NewFetchCmd creates and returns the fetch command

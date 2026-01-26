@@ -70,6 +70,7 @@ func runFetch(ctx context.Context, configFile string, config *Config) error {
 			existing.Title = prDetails.Title
 			existing.CIStatus = ParseCIStatus(prDetails.CIStatus)
 			existing.RunAttempt = prDetails.RunAttempt
+			existing.FailingChecks = prDetails.FailingChecks
 			updatedCount++
 		} else {
 			// Fetch full details for new PR
@@ -79,11 +80,12 @@ func runFetch(ctx context.Context, configFile string, config *Config) error {
 				continue
 			}
 			config.TrackedPRs = append(config.TrackedPRs, TrackedPR{
-				Number:     prDetails.Number,
-				Title:      prDetails.Title,
-				CIStatus:   ParseCIStatus(prDetails.CIStatus),
-				RunAttempt: prDetails.RunAttempt,
-				Merged:     false,
+				Number:        prDetails.Number,
+				Title:         prDetails.Title,
+				CIStatus:      ParseCIStatus(prDetails.CIStatus),
+				RunAttempt:    prDetails.RunAttempt,
+				FailingChecks: prDetails.FailingChecks,
+				Merged:        false,
 			})
 			newCount++
 			fmt.Printf("  Added: #%d %s\n", prDetails.Number, prDetails.Title)

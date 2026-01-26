@@ -132,3 +132,19 @@ func (c *Client) MergePR(ctx context.Context, prNumber int, mergeMethod string) 
 
 	return nil
 }
+
+// ApprovePR approves a pull request
+func (c *Client) ApprovePR(ctx context.Context, prNumber int) error {
+	slog.Debug("GitHub API: Approving PR", "org", c.org, "repo", c.repo, "pr", prNumber)
+
+	review := &github.PullRequestReviewRequest{
+		Event: github.String("APPROVE"),
+	}
+
+	_, _, err := c.client.PullRequests.CreateReview(ctx, c.org, c.repo, prNumber, review)
+	if err != nil {
+		return fmt.Errorf("failed to approve PR #%d: %w", prNumber, err)
+	}
+
+	return nil
+}

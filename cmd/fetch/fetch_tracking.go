@@ -205,6 +205,11 @@ func updateAllTrackedPRs(ctx context.Context, config *cmd.Config, client *github
 							currentStatus.PR.RunAttempt = prDetails.RunAttempt
 							changed = true
 						}
+						// Update failing checks (only relevant when CI is failing)
+						if !slicesEqual(currentStatus.PR.FailingChecks, prDetails.FailingChecks) {
+							currentStatus.PR.FailingChecks = prDetails.FailingChecks
+							changed = true
+						}
 						if changed {
 							trackedPR.Branches[branch] = currentStatus
 							updated = true
@@ -259,12 +264,26 @@ func determineBranchStatus(ctx context.Context, cherryPick github.CherryPickPR, 
 	return cmd.BranchStatus{
 		Status: status,
 		PR: &cmd.PickPR{
-			Number:     prDetails.Number,
-			Title:      prDetails.Title,
-			CIStatus:   cmd.ParseCIStatus(prDetails.CIStatus),
-			RunAttempt: prDetails.RunAttempt,
+			Number:        prDetails.Number,
+			Title:         prDetails.Title,
+			CIStatus:      cmd.ParseCIStatus(prDetails.CIStatus),
+			RunAttempt:    prDetails.RunAttempt,
+			FailingChecks: prDetails.FailingChecks,
 		},
 	}
+}
+
+// slicesEqual compares two string slices for equality
+func slicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // updateLastFetchDate updates the last fetch date and saves the config

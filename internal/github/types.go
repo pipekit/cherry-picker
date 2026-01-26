@@ -11,6 +11,7 @@ type PR struct {
 	Merged        bool
 	CIStatus      string   // "passing", "failing", "pending", or "unknown"
 	RunAttempt    int      // Maximum run_attempt from workflow runs (1 = first run, 2 = one retry, etc.)
+	FailingChecks []string // Names of failing CI checks (only populated when CIStatus is "failing")
 	CherryPickFor []string // Target branches extracted from cherry-pick/* labels
 }
 

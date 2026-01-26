@@ -205,7 +205,7 @@ func (c *Client) GetPR(ctx context.Context, number int) (*PR, error) {
 	}, nil
 }
 
-// GetPRWithDetails fetches detailed information for a specific PR including CI status and retry count
+// GetPRWithDetails fetches detailed information for a specific PR including CI status, retry count, and failing checks
 func (c *Client) GetPRWithDetails(ctx context.Context, number int) (*PR, error) {
 	slog.Debug("GitHub API: Getting PR with details", "org", c.org, "repo", c.repo, "pr", number)
 	pr, _, err := c.client.PullRequests.Get(ctx, c.org, c.repo, number)
@@ -215,41 +215,23 @@ func (c *Client) GetPRWithDetails(ctx context.Context, number int) (*PR, error) 
 
 	sha := pr.GetHead().GetSHA()
 
-	// Check CI status by getting commit status
-	ciStatus, err := c.getPRCIStatus(ctx, sha)
+	// Get full CI status including failing check names
+	ciResult, err := c.GetFullCIStatus(ctx, sha)
 	if err != nil {
 		// Don't fail the whole request if we can't get CI status
-		ciStatus = "unknown"
-	}
-
-	// Get run attempt from workflow runs
-	runAttempt, err := c.getPRRunAttempt(ctx, sha)
-	if err != nil {
-		// Don't fail the whole request if we can't get run attempt
-		runAttempt = 0
+		ciResult = &CIStatusResult{Status: "unknown"}
 	}
 
 	return &PR{
-		Number:     pr.GetNumber(),
-		Title:      pr.GetTitle(),
-		URL:        pr.GetHTMLURL(),
-		SHA:        pr.GetMergeCommitSHA(),
-		Merged:     pr.MergedAt != nil,
-		CIStatus:   ciStatus,
-		RunAttempt: runAttempt,
+		Number:        pr.GetNumber(),
+		Title:         pr.GetTitle(),
+		URL:           pr.GetHTMLURL(),
+		SHA:           pr.GetMergeCommitSHA(),
+		Merged:        pr.MergedAt != nil,
+		CIStatus:      ciResult.Status,
+		RunAttempt:    ciResult.RunAttempt,
+		FailingChecks: ciResult.FailingChecks,
 	}, nil
-}
-
-// getPRCIStatus checks the CI status of a commit using the CIStatusChecker
-func (c *Client) getPRCIStatus(ctx context.Context, sha string) (string, error) {
-	checker := c.newCIStatusChecker()
-	return checker.GetStatus(ctx, sha)
-}
-
-// getPRRunAttempt gets the run attempt for a commit SHA
-func (c *Client) getPRRunAttempt(ctx context.Context, sha string) (int, error) {
-	checker := c.newCIStatusChecker()
-	return checker.GetRunAttempt(ctx, sha)
 }
 
 // GetPRHeadBranch returns the head branch name for a PR (used for force pushing)
@@ -316,21 +298,21 @@ func (c *Client) GetPRWithDetailsNoDCOFilter(ctx context.Context, number int) (*
 
 	sha := pr.GetHead().GetSHA()
 
-	// Check CI status without DCO filtering
-	ciStatus, runAttempt, err := c.GetCIStatusAndRunAttemptWithoutDCOFilter(ctx, sha)
+	// Get full CI status without DCO filtering, including failing check names
+	ciResult, err := c.GetFullCIStatusWithoutDCOFilter(ctx, sha)
 	if err != nil {
-		ciStatus = "unknown"
-		runAttempt = 0
+		ciResult = &CIStatusResult{Status: "unknown"}
 	}
 
 	return &PR{
-		Number:     pr.GetNumber(),
-		Title:      pr.GetTitle(),
-		URL:        pr.GetHTMLURL(),
-		SHA:        sha,
-		Merged:     pr.MergedAt != nil,
-		CIStatus:   ciStatus,
-		RunAttempt: runAttempt,
+		Number:        pr.GetNumber(),
+		Title:         pr.GetTitle(),
+		URL:           pr.GetHTMLURL(),
+		SHA:           sha,
+		Merged:        pr.MergedAt != nil,
+		CIStatus:      ciResult.Status,
+		RunAttempt:    ciResult.RunAttempt,
+		FailingChecks: ciResult.FailingChecks,
 	}, nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -114,17 +115,20 @@ func displayPRStatus(pr TrackedPR, config *Config, configFile string) {
 		switch pr.CIStatus {
 		case CIStatusPassing:
 			fmt.Printf("  Status: ✅ CI passing\n")
-			fmt.Printf("  💡 %s%s merge %d\n", executablePath, configFlag, pr.Number)
+			fmt.Printf("  💡 %s%s approve %d\n", executablePath, configFlag, pr.Number)
 		case CIStatusFailing:
 			fmt.Printf("  Status: ❌ CI failing")
 			if pr.RunAttempt > 0 {
 				fmt.Printf(" [run attempt %d]", pr.RunAttempt)
 			}
 			fmt.Println()
+			if len(pr.FailingChecks) > 0 {
+				fmt.Printf("  Failed: %s\n", strings.Join(pr.FailingChecks, ", "))
+			}
 			fmt.Printf("  💡 %s%s retry %d\n", executablePath, configFlag, pr.Number)
 		case CIStatusPending:
 			fmt.Printf("  Status: 🔄 CI pending\n")
-		default:
+		case CIStatusUnknown:
 			fmt.Printf("  Status: ❓ CI unknown\n")
 		}
 	}
@@ -149,6 +153,8 @@ func displaySummary(prs []TrackedPR) {
 			failing++
 		case CIStatusPending:
 			pending++
+		case CIStatusUnknown:
+			// Don't count unknown status PRs in any category
 		}
 	}
 

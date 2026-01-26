@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/alan/cherry-picker/cmd"
 	"github.com/alan/cherry-picker/cmd/fetch"
@@ -234,6 +235,11 @@ func displayBranchStatus(branch string, status cmd.BranchStatus, config *cmd.Con
 				fmt.Printf(" [run attempt %d]", status.PR.RunAttempt)
 			}
 			fmt.Println()
+
+			// Show failing checks if CI is failing
+			if status.PR.CIStatus == cmd.CIStatusFailing && len(status.PR.FailingChecks) > 0 {
+				fmt.Printf("  %-15s  Failed: %s\n", "", strings.Join(status.PR.FailingChecks, ", "))
+			}
 
 			// Show suggested command if available
 			if ciInfo.suggestedCommand != "" {

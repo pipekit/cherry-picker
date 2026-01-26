@@ -35,6 +35,7 @@ and enabling retry and merge operations.`,
 	rootCmd.AddCommand(newStatusCmd(&configFile))
 	rootCmd.AddCommand(newRetryCmd(&configFile))
 	rootCmd.AddCommand(newMergeCmd(&configFile))
+	rootCmd.AddCommand(newApproveCmd(&configFile))
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)

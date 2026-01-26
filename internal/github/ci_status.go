@@ -229,6 +229,117 @@ func (checker *CIStatusChecker) GetRunAttempt(ctx context.Context, sha string) (
 	return maxAttempt, nil
 }
 
+// CIStatusResult holds the CI status along with details about failing checks
+type CIStatusResult struct {
+	Status        string
+	FailingChecks []string
+	RunAttempt    int
+}
+
+// GetStatusWithFailingChecks returns CI status along with names of failing checks
+func (checker *CIStatusChecker) GetStatusWithFailingChecks(ctx context.Context, sha string) (*CIStatusResult, error) {
+	result := &CIStatusResult{}
+
+	// Get combined status with failing check names
+	combinedStatus, combinedFailing, err := checker.getCombinedStatusWithFailing(ctx, sha)
+	if err != nil {
+		return &CIStatusResult{Status: "unknown"}, fmt.Errorf("failed to fetch CI status for commit %s: %w", sha, err)
+	}
+
+	// Get check runs status with failing check names
+	checkRunsStatus, checkRunsFailing, err := checker.getCheckRunsStatusWithFailing(ctx, sha)
+	if err != nil {
+		// Fall back to combined status only - check runs are not critical
+		slog.Debug("Failed to get check runs, using combined status only", "error", err)
+		result.Status = combinedStatus
+		result.FailingChecks = combinedFailing
+		return result, nil //nolint:nilerr // Intentional fallback behavior
+	}
+
+	result.Status = checker.aggregateStatus(combinedStatus, checkRunsStatus)
+
+	// Combine failing checks from both sources
+	result.FailingChecks = append(result.FailingChecks, combinedFailing...)
+	result.FailingChecks = append(result.FailingChecks, checkRunsFailing...)
+
+	return result, nil
+}
+
+// getCombinedStatusWithFailing gets traditional commit status with failing check names
+func (checker *CIStatusChecker) getCombinedStatusWithFailing(ctx context.Context, sha string) (string, []string, error) {
+	slog.Debug("GitHub API: Getting combined status", "org", checker.client.org, "repo", checker.client.repo, "sha", sha)
+	status, _, err := checker.client.client.Repositories.GetCombinedStatus(ctx, checker.client.org, checker.client.repo, sha, nil)
+	if err != nil {
+		return "unknown", nil, err
+	}
+
+	var relevantStatuses []*github.RepoStatus
+	var failingChecks []string
+
+	for _, s := range status.Statuses {
+		if checker.isDCOCheck(s.GetContext()) {
+			continue
+		}
+		relevantStatuses = append(relevantStatuses, s)
+		if s.GetState() == "failure" || s.GetState() == "error" {
+			failingChecks = append(failingChecks, s.GetContext())
+		}
+	}
+
+	if len(relevantStatuses) == 0 {
+		return "unknown", nil, nil
+	}
+
+	return checker.evaluateStatuses(relevantStatuses), failingChecks, nil
+}
+
+// getCheckRunsStatusWithFailing gets check runs status with failing check names
+func (checker *CIStatusChecker) getCheckRunsStatusWithFailing(ctx context.Context, sha string) (string, []string, error) {
+	slog.Debug("GitHub API: Listing check runs", "org", checker.client.org, "repo", checker.client.repo, "sha", sha)
+	checkRuns, _, err := checker.client.client.Checks.ListCheckRunsForRef(ctx, checker.client.org, checker.client.repo, sha, nil)
+	if err != nil {
+		return "unknown", nil, err
+	}
+
+	if len(checkRuns.CheckRuns) == 0 {
+		return "unknown", nil, nil
+	}
+
+	hasRunning := false
+	hasFailed := false
+	hasCompleted := false
+	var failingChecks []string
+
+	for _, run := range checkRuns.CheckRuns {
+		if checker.isDCOCheck(run.GetName()) {
+			continue
+		}
+
+		switch run.GetStatus() {
+		case "queued", "in_progress":
+			hasRunning = true
+		case "completed":
+			hasCompleted = true
+			if run.GetConclusion() == "failure" || run.GetConclusion() == "cancelled" || run.GetConclusion() == "timed_out" {
+				hasFailed = true
+				failingChecks = append(failingChecks, run.GetName())
+			}
+		}
+	}
+
+	if hasRunning {
+		return "pending", nil, nil
+	}
+	if hasFailed {
+		return "failing", failingChecks, nil
+	}
+	if hasCompleted {
+		return "passing", nil, nil
+	}
+
+	return "unknown", nil, nil
+}
+
 // GetCIStatusWithoutDCOFilter returns CI status for a SHA without filtering out DCO checks
 // This is used by dep-merger where DCO failures should block merging
 func (c *Client) GetCIStatusWithoutDCOFilter(ctx context.Context, sha string) (string, error) {
@@ -245,7 +356,32 @@ func (c *Client) GetCIStatusAndRunAttemptWithoutDCOFilter(ctx context.Context, s
 	}
 	runAttempt, err := checker.GetRunAttempt(ctx, sha)
 	if err != nil {
-		return status, 0, nil // Don't fail if we can't get run attempt
+		slog.Debug("Failed to get run attempt", "error", err)
+		return status, 0, nil //nolint:nilerr // Don't fail if we can't get run attempt
 	}
 	return status, runAttempt, nil
+}
+
+// GetFullCIStatus returns complete CI status including failing check names (with DCO filtering for cherry-picker)
+func (c *Client) GetFullCIStatus(ctx context.Context, sha string) (*CIStatusResult, error) {
+	checker := c.newCIStatusChecker()
+	result, err := checker.GetStatusWithFailingChecks(ctx, sha)
+	if err != nil {
+		return result, err
+	}
+	runAttempt, _ := checker.GetRunAttempt(ctx, sha)
+	result.RunAttempt = runAttempt
+	return result, nil
+}
+
+// GetFullCIStatusWithoutDCOFilter returns complete CI status without DCO filtering (for dep-merger)
+func (c *Client) GetFullCIStatusWithoutDCOFilter(ctx context.Context, sha string) (*CIStatusResult, error) {
+	checker := c.newCIStatusCheckerWithOptions(false)
+	result, err := checker.GetStatusWithFailingChecks(ctx, sha)
+	if err != nil {
+		return result, err
+	}
+	runAttempt, _ := checker.GetRunAttempt(ctx, sha)
+	result.RunAttempt = runAttempt
+	return result, nil
 }

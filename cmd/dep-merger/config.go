@@ -33,17 +33,18 @@ func ParseCIStatus(s string) CIStatus {
 
 // Config represents the structure of dep-merger.yaml
 type Config struct {
-	Org           string       `yaml:"org"`
-	Repo          string       `yaml:"repo"`
-	LastFetchDate *time.Time   `yaml:"last_fetch_date,omitempty"`
-	TrackedPRs    []TrackedPR  `yaml:"tracked_prs,omitempty"`
+	Org           string      `yaml:"org"`
+	Repo          string      `yaml:"repo"`
+	LastFetchDate *time.Time  `yaml:"last_fetch_date,omitempty"`
+	TrackedPRs    []TrackedPR `yaml:"tracked_prs,omitempty"`
 }
 
 // TrackedPR represents a dependency PR that we're tracking
 type TrackedPR struct {
-	Number     int      `yaml:"number"`
-	Title      string   `yaml:"title"`
-	CIStatus   CIStatus `yaml:"ci_status"`
-	RunAttempt int      `yaml:"run_attempt,omitempty"`
-	Merged     bool     `yaml:"merged"`
+	Number        int      `yaml:"number"`
+	Title         string   `yaml:"title"`
+	CIStatus      CIStatus `yaml:"ci_status"`
+	RunAttempt    int      `yaml:"run_attempt,omitempty"`
+	FailingChecks []string `yaml:"failing_checks,omitempty"` // Names of failing CI checks (only populated when CI is failing)
+	Merged        bool     `yaml:"merged"`
 }

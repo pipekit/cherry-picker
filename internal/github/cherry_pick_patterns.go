@@ -10,8 +10,7 @@ import (
 // cherryPickContextPattern detects if text contains cherry-pick context
 var cherryPickContextPattern = regexp.MustCompile(`(?i)cherry[- ]?pick`)
 
-// Bot comment patterns for detecting cherry-pick status from bot comments
-// BotSuccessPattern matches: "🍒 Cherry-pick PR created for 3.7: #14944"
+// BotSuccessPattern matches bot success comments: "🍒 Cherry-pick PR created for 3.7: #14944"
 var BotSuccessPattern = regexp.MustCompile(`Cherry-pick PR created for ([0-9.]+): #(\d+)`)
 
 // BotFailurePattern matches: "❌ Cherry-pick failed for 3.7."

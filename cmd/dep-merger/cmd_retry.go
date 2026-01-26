@@ -90,7 +90,9 @@ func runRetry(ctx context.Context, _ string, config *Config, prNumber int) error
 	return nil
 }
 
-func retrySinglePR(ctx context.Context, client interface{ RetryFailedWorkflows(context.Context, int) error }, pr *TrackedPR) error {
+func retrySinglePR(ctx context.Context, client interface {
+	RetryFailedWorkflows(context.Context, int) error
+}, pr *TrackedPR) error {
 	slog.Info("Retrying failed CI for PR", "pr", pr.Number)
 
 	if err := client.RetryFailedWorkflows(ctx, pr.Number); err != nil {

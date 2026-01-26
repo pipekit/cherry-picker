@@ -25,7 +25,9 @@
       "Bash(git fetch:*)",
       "Bash(source ../pat.sh)",
       "Bash(go run .. fetch -l debug)",
-      "Bash(../cherry-picker fetch:*)"
+      "Bash(../cherry-picker fetch:*)",
+      "Bash(tree:*)",
+      "Bash(go vet:*)"
     ],
     "deny": [],
     "ask": []
