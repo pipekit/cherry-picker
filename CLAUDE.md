@@ -4,13 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Cherry-picker is a CLI tool for managing cherry-picks across GitHub repositories, specifically designed for maintaining release branches with semantic versioning. It tracks PR cherry-pick status in a YAML configuration file and integrates with cursor-agent for AI-assisted conflict resolution.
+This repository contains two CLI tools for managing GitHub PRs:
+
+1. **cherry-picker**: Manages cherry-picks across release branches with AI-assisted conflict resolution
+2. **dep-merger**: Manages dependency PRs (those with `type/dependencies` label) with retry and merge operations
+
+Both tools track PR status in YAML configuration files and share common GitHub API infrastructure.
 
 ## Build and Test Commands
 
 ```bash
-# Build the binary
+# Build both binaries
+make build
+
+# Build individual binaries
 make cherry-picker
+make dep-merger
 
 # Run all checks (format, vet, test)
 make check
@@ -30,7 +39,7 @@ make vet
 make clean
 ```
 
-## Architecture
+## Cherry-Picker Architecture
 
 ### Core Components
 
@@ -136,7 +145,7 @@ Uses configured AI assistant CLI (cursor-agent, claude, or custom) for interacti
 - `claude`: Anthropic's Claude CLI
 - Custom: Any command-line tool that provides interactive session
 
-## Configuration File Structure
+## Cherry-Picker Configuration File
 
 `cherry-picks.yaml` schema:
 ```yaml
@@ -156,6 +165,69 @@ tracked_prs:
           title: string
           ci_status: passing|failing|pending|unknown
 ```
+
+---
+
+## Dep-Merger Architecture
+
+**Entry point**: `cmd/dep-merger/main.go` - Standalone binary using Cobra for CLI commands. All commands have access to a global `--config` flag (default: `dep-merger.yaml`).
+
+### Key Differences from Cherry-Picker
+
+| Aspect | Cherry-Picker | Dep-Merger |
+|--------|---------------|------------|
+| Label | `cherry-pick/*` | `type/dependencies` |
+| DCO filtering | Filters out DCO checks | **Respects DCO** (must pass) |
+| PR tracking | Per-branch status | Single PR status |
+| PR discovery | Merged PRs with labels | **Open PRs** with label |
+| AI assistant | Required for conflicts | Not needed |
+
+### Commands (cmd/dep-merger/)
+
+All commands are in the `main` package within `cmd/dep-merger/`:
+
+- **config** (`cmd_config.go`): Initialize/update configuration (auto-detects org/repo from git)
+- **fetch** (`cmd_fetch.go`): Fetch open PRs with `type/dependencies` label
+  - Discovers new dependency PRs and adds them to tracking
+  - Updates CI status for existing tracked PRs
+  - Marks PRs as merged if no longer open
+- **status** (`cmd_status.go`): Display tracked PRs with CI status and suggested commands
+  - Shows passing/failing/pending CI status
+  - Suggests `retry` for failing PRs, `merge` for passing PRs
+  - `--fetch` flag to refresh data before displaying
+  - `--show-merged` flag to include merged PRs
+- **retry** (`cmd_retry.go`): Retry failed CI workflows via GitHub Actions API
+  - `dep-merger retry` - Retry all PRs with failing CI
+  - `dep-merger retry 123` - Retry specific PR
+- **merge** (`cmd_merge.go`): Squash merge PRs with passing CI
+  - `dep-merger merge` - Merge all PRs with passing CI
+  - `dep-merger merge 123` - Merge specific PR
+
+### Dep-Merger Configuration File
+
+`dep-merger.yaml` schema:
+```yaml
+org: string
+repo: string
+last_fetch_date: time.Time
+tracked_prs:
+  - number: int
+    title: string
+    ci_status: passing|failing|pending|unknown
+    run_attempt: int  # Number of CI retry attempts
+    merged: bool
+```
+
+### Shared Infrastructure
+
+Dep-merger reuses the following from cherry-picker:
+
+- `internal/github/client.go`: GitHub API client
+- `internal/github/workflows.go`: Retry and merge operations
+- `internal/github/pr.go`: PR fetching (uses `GetOpenPRsWithLabel`, `GetPRWithDetailsNoDCOFilter`)
+- `internal/github/ci_status.go`: CI status checking (with `filterDCO: false`)
+
+---
 
 ## Dependencies
 
@@ -190,7 +262,9 @@ Tests use standard Go testing with dependency injection:
 - Use `exec.Command` for git operations with stdout/stderr piped for visibility
 - Commands follow factory pattern: `New<Command>Cmd(dependencies) *cobra.Command`
 - Validation uses shared utilities in `internal/commands/common.go`
-- DCO checks are filtered out when determining CI status
-- The tool expects squash merges for PRs
+- DCO check filtering is configurable via `newCIStatusCheckerWithOptions(filterDCO bool)`:
+  - Cherry-picker: `filterDCO: true` (ignores DCO failures)
+  - Dep-merger: `filterDCO: false` (respects DCO failures)
+- The tools expect squash merges for PRs
 - Use testify/assert and testify/require when writing or refactoring tests
 - Always use the cobracmd Context() or t.Context(), never create one

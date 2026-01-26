@@ -1,3 +1,12 @@
+# Cherry Picker & Dep Merger
+
+This repository contains two CLI tools for managing GitHub PRs:
+
+1. **cherry-picker**: Manages cherry-picks across release branches with AI-assisted conflict resolution
+2. **dep-merger**: Manages dependency PRs (those with `type/dependencies` label) with retry and merge operations
+
+---
+
 # Cherry Picker
 
 A CLI tool for managing cherry-picks across GitHub repositories using a YAML configuration file to track state.
@@ -543,6 +552,204 @@ Each tracked PR has per-branch status tracking:
     - **title**: Cherry-pick PR title
     - **ci_status**: CI status (`passing`, `failing`, `pending`, `unknown`)
 
+---
+
+# Dep Merger
+
+A CLI tool for managing dependency PRs on GitHub repositories. It tracks PRs with the `type/dependencies` label and provides commands to retry failed CI and merge PRs with passing CI.
+
+## Key Differences from Cherry Picker
+
+| Aspect | Cherry Picker | Dep Merger |
+|--------|---------------|------------|
+| Label | `cherry-pick/*` | `type/dependencies` |
+| DCO checks | Filtered out (ignored) | **Must pass** |
+| PR type | Merged PRs needing cherry-pick | **Open PRs** to merge |
+| AI assistant | Required for conflicts | Not needed |
+| Branch tracking | Per-branch status | Single PR status |
+
+## Installation
+
+Build the tool from source:
+
+```bash
+make dep-merger
+```
+
+Or build both tools:
+
+```bash
+make build
+```
+
+## Usage
+
+### Initialize Configuration
+
+Create a new `dep-merger.yaml` configuration file:
+
+```bash
+./dep-merger config --org myorg --repo myrepo
+```
+
+When run from a git repository, org and repo are auto-detected from the git remote.
+
+### Fetch Dependency PRs
+
+Fetch open PRs with the `type/dependencies` label from GitHub:
+
+```bash
+export GITHUB_TOKEN="your_github_token"
+./dep-merger fetch
+```
+
+This command will:
+- Search for open PRs with the `type/dependencies` label
+- Add new PRs to tracking with their CI status
+- Update CI status for already tracked PRs
+- Mark PRs as merged if they're no longer open
+
+### Check Status
+
+View the current status of all tracked dependency PRs:
+
+```bash
+./dep-merger status
+```
+
+Example output:
+
+```
+Dependency PR status for myorg/myrepo
+
+Bump golang.org/x/net from 0.17.0 to 0.23.0 (https://github.com/myorg/myrepo/pull/123)
+  Status: ✅ CI passing
+  💡 ./dep-merger merge 123
+
+Bump github.com/stretchr/testify from 1.8.4 to 1.9.0 (https://github.com/myorg/myrepo/pull/124)
+  Status: ❌ CI failing [run attempt 2]
+  💡 ./dep-merger retry 124
+
+Bump actions/checkout from 3 to 4 (https://github.com/myorg/myrepo/pull/125)
+  Status: 🔄 CI pending
+
+Summary: 3 PR(s) - 1 passing, 1 failing, 1 pending, 0 merged
+```
+
+Options:
+- `--fetch`: Fetch latest data from GitHub before showing status
+- `--show-merged`: Include merged PRs in the output
+
+### Retry Failed CI
+
+Retry failed CI workflows for dependency PRs:
+
+```bash
+./dep-merger retry 123        # Retry specific PR
+./dep-merger retry            # Retry all PRs with failing CI
+```
+
+### Merge PRs
+
+Squash and merge dependency PRs with passing CI:
+
+```bash
+./dep-merger merge 123        # Merge specific PR
+./dep-merger merge            # Merge all PRs with passing CI
+```
+
+## Command Reference
+
+### config
+
+Initialize or update configuration:
+
+- `--org, -o`: GitHub organization or username (auto-detected from git)
+- `--repo, -r`: GitHub repository name (auto-detected from git)
+- `--config, -c`: Configuration file path (default: "dep-merger.yaml")
+
+### fetch
+
+Fetch open dependency PRs from GitHub:
+
+- `--config, -c`: Configuration file path (default: "dep-merger.yaml")
+
+### status
+
+View current status of tracked PRs:
+
+- `--config, -c`: Configuration file path (default: "dep-merger.yaml")
+- `--fetch`: Fetch latest data before showing status
+- `--show-merged`: Show PRs that have been merged
+
+### retry
+
+Retry failed CI workflows:
+
+- `--config, -c`: Configuration file path (default: "dep-merger.yaml")
+
+### merge
+
+Squash and merge PRs with passing CI:
+
+- `--config, -c`: Configuration file path (default: "dep-merger.yaml")
+
+## Configuration File
+
+The `dep-merger.yaml` file stores the repository configuration and tracked PRs:
+
+```yaml
+org: myorg
+repo: myrepo
+last_fetch_date: 2024-01-15T10:30:00Z
+tracked_prs:
+  - number: 123
+    title: "Bump golang.org/x/net from 0.17.0 to 0.23.0"
+    ci_status: passing
+    run_attempt: 1
+    merged: false
+  - number: 124
+    title: "Bump github.com/stretchr/testify from 1.8.4 to 1.9.0"
+    ci_status: failing
+    run_attempt: 2
+    merged: false
+  - number: 125
+    title: "Bump actions/checkout from 3 to 4"
+    ci_status: pending
+    merged: false
+```
+
+### PR Fields
+
+- **number**: PR number
+- **title**: PR title
+- **ci_status**: Current CI status (`passing`, `failing`, `pending`, `unknown`)
+- **run_attempt**: Number of CI run attempts (increments with each retry)
+- **merged**: Whether the PR has been merged
+
+## Typical Workflow
+
+```bash
+# 1. Initialize (once per repository)
+./dep-merger config
+
+# 2. Fetch dependency PRs
+./dep-merger fetch
+
+# 3. Check status and see what needs attention
+./dep-merger status
+
+# 4. Retry any failing CI
+./dep-merger retry
+
+# 5. Wait for CI to pass, then merge
+./dep-merger merge
+
+# 6. Repeat steps 2-5 as new dependency PRs arrive
+```
+
+---
+
 ## Development
 
 Run all checks (format, vet, test):
@@ -551,10 +758,17 @@ Run all checks (format, vet, test):
 make check
 ```
 
-Build the binary:
+Build both binaries:
+
+```bash
+make build
+```
+
+Build individual binaries:
 
 ```bash
 make cherry-picker
+make dep-merger
 ```
 
 Clean build artifacts:

@@ -1,4 +1,4 @@
-.PHONY: test clean fmt vet check all lint modernize
+.PHONY: test clean fmt vet check all lint modernize build
 
 # Find all Go source files
 GO_FILES := $(shell find . -name '*.go' -type f)
@@ -6,6 +6,13 @@ GO_FILES := $(shell find . -name '*.go' -type f)
 # Build the cherry-picker binary
 cherry-picker: check $(GO_FILES)
 	go build -o cherry-picker .
+
+# Build the dep-merger binary
+dep-merger: check $(GO_FILES)
+	go build -o dep-merger ./cmd/dep-merger
+
+# Build both binaries
+build: cherry-picker dep-merger
 
 # Run tests
 test:
@@ -17,7 +24,7 @@ test-coverage:
 
 # Clean build artifacts
 clean:
-	rm -f cherry-picker
+	rm -f cherry-picker dep-merger
 
 # Format code
 fmt:

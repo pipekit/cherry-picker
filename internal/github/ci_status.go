@@ -9,29 +9,43 @@ import (
 	"github.com/google/go-github/v57/github"
 )
 
-// CIStatusChecker handles checking CI status for commits, filtering out DCO checks
+// CIStatusChecker handles checking CI status for commits, optionally filtering out DCO checks
 type CIStatusChecker struct {
 	client      *Client
 	dcoPatterns []string
+	filterDCO   bool
 }
 
-// newCIStatusChecker creates a new CI status checker with default DCO patterns
+// newCIStatusChecker creates a new CI status checker with DCO filtering enabled (for cherry-picker)
 func (c *Client) newCIStatusChecker() *CIStatusChecker {
-	return &CIStatusChecker{
-		client: c,
-		dcoPatterns: []string{
+	return c.newCIStatusCheckerWithOptions(true)
+}
+
+// newCIStatusCheckerWithOptions creates a new CI status checker with configurable DCO filtering
+func (c *Client) newCIStatusCheckerWithOptions(filterDCO bool) *CIStatusChecker {
+	checker := &CIStatusChecker{
+		client:    c,
+		filterDCO: filterDCO,
+	}
+	if filterDCO {
+		checker.dcoPatterns = []string{
 			"dco",
 			"DCO",
 			"developer-certificate-of-origin",
 			"signoff",
 			"sign-off",
 			"signed-off-by",
-		},
+		}
 	}
+	return checker
 }
 
 // isDCOCheck determines if a check name matches DCO patterns
+// Returns false if DCO filtering is disabled
 func (checker *CIStatusChecker) isDCOCheck(checkName string) bool {
+	if !checker.filterDCO {
+		return false
+	}
 	lowerName := strings.ToLower(checkName)
 	for _, pattern := range checker.dcoPatterns {
 		if strings.Contains(lowerName, strings.ToLower(pattern)) {
@@ -213,4 +227,25 @@ func (checker *CIStatusChecker) GetRunAttempt(ctx context.Context, sha string) (
 	}
 
 	return maxAttempt, nil
+}
+
+// GetCIStatusWithoutDCOFilter returns CI status for a SHA without filtering out DCO checks
+// This is used by dep-merger where DCO failures should block merging
+func (c *Client) GetCIStatusWithoutDCOFilter(ctx context.Context, sha string) (string, error) {
+	checker := c.newCIStatusCheckerWithOptions(false)
+	return checker.GetStatus(ctx, sha)
+}
+
+// GetCIStatusAndRunAttemptWithoutDCOFilter returns CI status and run attempt without DCO filtering
+func (c *Client) GetCIStatusAndRunAttemptWithoutDCOFilter(ctx context.Context, sha string) (string, int, error) {
+	checker := c.newCIStatusCheckerWithOptions(false)
+	status, err := checker.GetStatus(ctx, sha)
+	if err != nil {
+		return "unknown", 0, err
+	}
+	runAttempt, err := checker.GetRunAttempt(ctx, sha)
+	if err != nil {
+		return status, 0, nil // Don't fail if we can't get run attempt
+	}
+	return status, runAttempt, nil
 }

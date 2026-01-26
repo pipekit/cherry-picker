@@ -4,6 +4,8 @@
 # Binaries for programs and plugins
 cherry-picker
 cherry-picker.exe
+dep-merger
+dep-merger.exe
 
 # Test binary, built with `go test -c`
 *.test

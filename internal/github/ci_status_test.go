@@ -8,6 +8,7 @@ import (
 
 func TestCIStatusChecker_IsDCOCheck(t *testing.T) {
 	checker := &CIStatusChecker{
+		filterDCO:   true,
 		dcoPatterns: []string{"dco", "DCO", "developer-certificate-of-origin", "signoff", "sign-off", "signed-off-by"},
 	}
 

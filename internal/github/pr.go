@@ -262,6 +262,78 @@ func (c *Client) GetPRHeadBranch(ctx context.Context, number int) (string, error
 	return pr.GetHead().GetRef(), nil
 }
 
+// GetOpenPRsWithLabel fetches open PRs with a specific label
+func (c *Client) GetOpenPRsWithLabel(ctx context.Context, label string) ([]PR, error) {
+	query := fmt.Sprintf("repo:%s/%s is:pr is:open label:%s", c.org, c.repo, label)
+
+	opts := &github.SearchOptions{
+		Sort:  "updated",
+		Order: "desc",
+		ListOptions: github.ListOptions{
+			PerPage: 100,
+		},
+	}
+
+	var allPRs []PR
+
+	for {
+		slog.Debug("GitHub API: Searching open PRs with label", "query", query, "page", opts.Page)
+		result, resp, err := c.client.Search.Issues(ctx, query, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to search PRs with label %s: %w", label, err)
+		}
+
+		for _, issue := range result.Issues {
+			if !issue.IsPullRequest() {
+				continue
+			}
+
+			allPRs = append(allPRs, PR{
+				Number:   issue.GetNumber(),
+				Title:    issue.GetTitle(),
+				URL:      issue.GetHTMLURL(),
+				Merged:   false,
+				CIStatus: "unknown",
+			})
+		}
+
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+
+	return allPRs, nil
+}
+
+// GetPRWithDetailsNoDCOFilter fetches PR details with CI status that respects DCO checks
+func (c *Client) GetPRWithDetailsNoDCOFilter(ctx context.Context, number int) (*PR, error) {
+	slog.Debug("GitHub API: Getting PR with details (no DCO filter)", "org", c.org, "repo", c.repo, "pr", number)
+	pr, _, err := c.client.PullRequests.Get(ctx, c.org, c.repo, number)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch PR #%d: %w", number, err)
+	}
+
+	sha := pr.GetHead().GetSHA()
+
+	// Check CI status without DCO filtering
+	ciStatus, runAttempt, err := c.GetCIStatusAndRunAttemptWithoutDCOFilter(ctx, sha)
+	if err != nil {
+		ciStatus = "unknown"
+		runAttempt = 0
+	}
+
+	return &PR{
+		Number:     pr.GetNumber(),
+		Title:      pr.GetTitle(),
+		URL:        pr.GetHTMLURL(),
+		SHA:        sha,
+		Merged:     pr.MergedAt != nil,
+		CIStatus:   ciStatus,
+		RunAttempt: runAttempt,
+	}, nil
+}
+
 // CreatePR creates a new pull request
 func (c *Client) CreatePR(ctx context.Context, title, body, head, base string) (int, error) {
 	newPR := &github.NewPullRequest{
