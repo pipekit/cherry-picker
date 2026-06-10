@@ -36,5 +36,6 @@ type TrackedPR struct {
 	CIStatus      CIStatus `yaml:"ci_status"`
 	RunAttempt    int      `yaml:"run_attempt,omitempty"`
 	FailingChecks []string `yaml:"failing_checks,omitempty"` // Names of failing CI checks (only populated when CI is failing)
+	Approved      bool     `yaml:"approved,omitempty"`
 	Merged        bool     `yaml:"merged"`
 }

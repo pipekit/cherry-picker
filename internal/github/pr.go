@@ -316,6 +316,26 @@ func (c *Client) GetPRWithDetailsNoDCOFilter(ctx context.Context, number int) (*
 	}, nil
 }
 
+// IsPRApproved checks if a PR has at least one approval review
+func (c *Client) IsPRApproved(ctx context.Context, number int) (bool, error) {
+	slog.Debug("GitHub API: Checking PR approval status", "org", c.org, "repo", c.repo, "pr", number)
+
+	reviews, _, err := c.client.PullRequests.ListReviews(ctx, c.org, c.repo, number, &github.ListOptions{
+		PerPage: 100,
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to list reviews for PR #%d: %w", number, err)
+	}
+
+	for _, review := range reviews {
+		if review.GetState() == "APPROVED" {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 // CreatePR creates a new pull request
 func (c *Client) CreatePR(ctx context.Context, title, body, head, base string) (int, error) {
 	newPR := &github.NewPullRequest{

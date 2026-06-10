@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"strings"
 
+	"github.com/alan/cherry-picker/internal/types"
 	"github.com/spf13/cobra"
 )
 
@@ -114,8 +114,13 @@ func displayPRStatus(pr TrackedPR, config *Config, configFile string) {
 	} else {
 		switch pr.CIStatus {
 		case CIStatusPassing:
-			fmt.Printf("  Status: ✅ CI passing\n")
-			fmt.Printf("  💡 %s%s approve %d\n", executablePath, configFlag, pr.Number)
+			if pr.Approved {
+				fmt.Printf("  Status: ✅ CI passing, approved\n")
+				fmt.Printf("  💡 %s%s merge %d\n", executablePath, configFlag, pr.Number)
+			} else {
+				fmt.Printf("  Status: ✅ CI passing\n")
+				fmt.Printf("  💡 %s%s approve %d\n", executablePath, configFlag, pr.Number)
+			}
 		case CIStatusFailing:
 			fmt.Printf("  Status: ❌ CI failing")
 			if pr.RunAttempt > 0 {
@@ -123,7 +128,7 @@ func displayPRStatus(pr TrackedPR, config *Config, configFile string) {
 			}
 			fmt.Println()
 			if len(pr.FailingChecks) > 0 {
-				fmt.Printf("  Failed: %s\n", strings.Join(pr.FailingChecks, ", "))
+				fmt.Printf("  Failed: %s\n", types.FormatFailingChecks(pr.FailingChecks))
 			}
 			fmt.Printf("  💡 %s%s retry %d\n", executablePath, configFlag, pr.Number)
 		case CIStatusPending:
@@ -137,6 +142,7 @@ func displayPRStatus(pr TrackedPR, config *Config, configFile string) {
 
 func displaySummary(prs []TrackedPR) {
 	passing := 0
+	approved := 0
 	failing := 0
 	pending := 0
 	merged := 0
@@ -149,6 +155,9 @@ func displaySummary(prs []TrackedPR) {
 		switch pr.CIStatus {
 		case CIStatusPassing:
 			passing++
+			if pr.Approved {
+				approved++
+			}
 		case CIStatusFailing:
 			failing++
 		case CIStatusPending:
@@ -158,8 +167,13 @@ func displaySummary(prs []TrackedPR) {
 		}
 	}
 
-	fmt.Printf("Summary: %d PR(s) - %d passing, %d failing, %d pending, %d merged\n",
-		len(prs), passing, failing, pending, merged)
+	if approved > 0 {
+		fmt.Printf("Summary: %d PR(s) - %d passing (%d approved), %d failing, %d pending, %d merged\n",
+			len(prs), passing, approved, failing, pending, merged)
+	} else {
+		fmt.Printf("Summary: %d PR(s) - %d passing, %d failing, %d pending, %d merged\n",
+			len(prs), passing, failing, pending, merged)
+	}
 }
 
 func getConfigFlag(configFile string) string {

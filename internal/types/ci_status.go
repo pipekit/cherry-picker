@@ -1,6 +1,12 @@
 // Package types provides shared types used across cherry-picker and dep-merger.
 package types
 
+import (
+	"strings"
+
+	"github.com/fatih/color"
+)
+
 // CIStatus represents the status of CI checks
 type CIStatus string
 
@@ -27,4 +33,29 @@ func ParseCIStatus(s string) CIStatus {
 	default:
 		return CIStatusUnknown
 	}
+}
+
+// IsCriticalCheck returns true if the check name matches patterns that indicate
+// a critical failure: UI, Lint, Codegen, argo-images.*, Build.*
+func IsCriticalCheck(name string) bool {
+	switch name {
+	case "UI", "Lint", "Codegen":
+		return true
+	}
+	return strings.HasPrefix(name, "argo-images") || strings.HasPrefix(name, "Build")
+}
+
+// FormatFailingChecks formats a list of failing checks, highlighting critical ones in bright red.
+func FormatFailingChecks(checks []string) string {
+	red := color.New(color.FgHiRed).SprintFunc()
+
+	formatted := make([]string, len(checks))
+	for i, check := range checks {
+		if IsCriticalCheck(check) {
+			formatted[i] = red(check)
+		} else {
+			formatted[i] = check
+		}
+	}
+	return strings.Join(formatted, ", ")
 }

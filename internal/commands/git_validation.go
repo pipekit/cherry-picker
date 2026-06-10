@@ -53,6 +53,7 @@ func IsWorkingDirectoryClean() bool {
 
 var keepFiles = []string{
 	"cherry-picks.yaml",
+	"dep-merger.yaml",
 	"CLAUDE.md",
 	".claude/",
 }

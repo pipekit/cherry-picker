@@ -70,6 +70,14 @@ func runFetch(ctx context.Context, configFile string, config *Config) error {
 			existing.CIStatus = ParseCIStatus(prDetails.CIStatus)
 			existing.RunAttempt = prDetails.RunAttempt
 			existing.FailingChecks = prDetails.FailingChecks
+
+			// Check approval status from GitHub
+			approved, err := client.IsPRApproved(ctx, pr.Number)
+			if err != nil {
+				fmt.Printf("  Warning: failed to check approval for PR #%d: %v\n", pr.Number, err)
+			} else {
+				existing.Approved = approved
+			}
 			updatedCount++
 		} else {
 			// Fetch full details for new PR
@@ -78,12 +86,20 @@ func runFetch(ctx context.Context, configFile string, config *Config) error {
 				fmt.Printf("  Warning: failed to get details for PR #%d: %v\n", pr.Number, err)
 				continue
 			}
+
+			// Check approval status from GitHub
+			approved, err := client.IsPRApproved(ctx, pr.Number)
+			if err != nil {
+				fmt.Printf("  Warning: failed to check approval for PR #%d: %v\n", pr.Number, err)
+			}
+
 			config.TrackedPRs = append(config.TrackedPRs, TrackedPR{
 				Number:        prDetails.Number,
 				Title:         prDetails.Title,
 				CIStatus:      ParseCIStatus(prDetails.CIStatus),
 				RunAttempt:    prDetails.RunAttempt,
 				FailingChecks: prDetails.FailingChecks,
+				Approved:      approved,
 				Merged:        false,
 			})
 			newCount++
