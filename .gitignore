@@ -4,8 +4,9 @@
 # Binaries for programs and plugins
 cherry-picker
 cherry-picker.exe
-dep-merger
-dep-merger.exe
+
+# Writer lock sidecar for the state file
+*.lock
 
 # Test binary, built with `go test -c`
 *.test

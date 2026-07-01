@@ -6,13 +6,8 @@ import (
 	"os"
 
 	configcmd "github.com/alan/cherry-picker/cmd/config"
-	fetchcmd "github.com/alan/cherry-picker/cmd/fetch"
-	"github.com/alan/cherry-picker/cmd/merge"
 	"github.com/alan/cherry-picker/cmd/pick"
-	"github.com/alan/cherry-picker/cmd/retry"
-	"github.com/alan/cherry-picker/cmd/status"
 	"github.com/alan/cherry-picker/cmd/summary"
-	"github.com/alan/cherry-picker/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -23,27 +18,34 @@ func main() {
 
 	rootCmd := &cobra.Command{
 		Use:   "cherry-picker",
-		Short: "A CLI tool for managing cherry-picks across GitHub repositories",
-		Long: `cherry-picker is a CLI tool that helps manage cherry-picking commits
-across GitHub repositories using a YAML configuration file to track state.`,
+		Short: "Manage cherry-picks and dependency PRs across GitHub repositories",
+		Long: `cherry-picker manages cherry-picks across release branches and dependency
+PRs for a GitHub repository, tracking their state in a single YAML file. Run the
+daemon to keep that state fresh in the background so interactive commands are
+instant.`,
 		PersistentPreRun: func(_ *cobra.Command, _ []string) {
 			setupLogger(logLevel, logFormat)
 		},
 	}
 
 	// Add global flags
-	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "cherry-picks.yaml", "Configuration file path")
+	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", defaultConfigFile, "Configuration file path")
 	rootCmd.PersistentFlags().StringVarP(&logLevel, "log-level", "l", "info", "Log level (debug, info, warn, error)")
 	rootCmd.PersistentFlags().StringVarP(&logFormat, "log-format", "f", "text", "Log format (text, json)")
 
-	// Create commands with access to the global config file
-	rootCmd.AddCommand(configcmd.NewConfigCmd(&configFile, config.LoadConfig, config.SaveConfig))
-	rootCmd.AddCommand(fetchcmd.NewFetchCmd(&configFile, config.LoadConfig, config.SaveConfig))
-	rootCmd.AddCommand(status.NewStatusCmd(&configFile, config.LoadConfig, config.SaveConfig))
-	rootCmd.AddCommand(pick.NewPickCmd(&configFile, config.LoadConfig, config.SaveConfig))
-	rootCmd.AddCommand(retry.NewRetryCmd(&configFile, config.LoadConfig, config.SaveConfig))
-	rootCmd.AddCommand(merge.NewMergeCmd(&configFile, config.LoadConfig, config.SaveConfig))
-	rootCmd.AddCommand(summary.NewSummaryCmd(&configFile, config.LoadConfig))
+	// Cherry-pick-only commands, wired to the unified state via adapters.
+	rootCmd.AddCommand(configcmd.NewConfigCmd(&configFile, loadCherry, saveCherry))
+	rootCmd.AddCommand(pick.NewPickCmd(&configFile, loadCherry, saveCherry))
+	rootCmd.AddCommand(summary.NewSummaryCmd(&configFile, loadCherry))
+
+	// Unified commands spanning both subsystems.
+	rootCmd.AddCommand(newFetchCmd(&configFile))
+	rootCmd.AddCommand(newStatusCmd(&configFile))
+	rootCmd.AddCommand(newMergeCmd(&configFile))
+	rootCmd.AddCommand(newRetryCmd(&configFile))
+	rootCmd.AddCommand(newApproveCmd(&configFile))
+	rootCmd.AddCommand(newMigrateCmd(&configFile))
+	rootCmd.AddCommand(newDaemonCmd(&configFile))
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)

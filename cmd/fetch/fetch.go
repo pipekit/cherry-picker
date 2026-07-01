@@ -62,18 +62,39 @@ func (fc *command) Run(ctx context.Context) error {
 		fc.Config.LastCheckedRelease = nil
 	}
 
-	return fetchAndProcessPRs(ctx, *fc.ConfigFile, fc.Config, since, fc.SaveConfig)
+	if err := RefreshCherry(ctx, fc.GitHubClient, fc.Config, since); err != nil {
+		return err
+	}
+
+	return updateLastFetchDate(*fc.ConfigFile, fc.Config, fc.SaveConfig)
 }
 
-// ExecuteFetch runs the fetch logic with the given config and save function
-// This is exported so other commands can trigger a fetch operation
+// ExecuteFetch runs the fetch logic with the given config and save function.
+// This is exported so other commands (e.g. status --fetch) can trigger a fetch.
 func ExecuteFetch(ctx context.Context, configFile string, config *cmd.Config, saveConfig func(string, *cmd.Config) error) error {
 	since, err := determineSinceDate("", config.LastFetchDate)
 	if err != nil {
 		return err
 	}
 
-	return fetchAndProcessPRs(ctx, configFile, config, since, saveConfig)
+	client, _, err := commands.InitializeGitHubClient(ctx, config)
+	if err != nil {
+		return err
+	}
+
+	if err := RefreshCherry(ctx, client, config, since); err != nil {
+		return err
+	}
+
+	return updateLastFetchDate(configFile, config, saveConfig)
+}
+
+// SinceForFetch returns the default since-date used by a non-interactive fetch
+// (no --since flag): the last fetch date, or 30 days ago on first run. The
+// unified orchestrator (internal/refresh) uses this before overwriting
+// LastFetchDate so the cherry-pick search window is computed correctly.
+func SinceForFetch(config *cmd.Config) (time.Time, error) {
+	return determineSinceDate("", config.LastFetchDate)
 }
 
 // determineSinceDate determines the date to fetch PRs from

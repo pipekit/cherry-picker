@@ -4,24 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This repository contains two CLI tools for managing GitHub PRs:
+This repository builds a **single** CLI tool, `cherry-picker`, with two subsystems:
 
-1. **cherry-picker**: Manages cherry-picks across release branches with AI-assisted conflict resolution
-2. **dep-merger**: Manages dependency PRs (those with `type/dependencies` label) with retry and merge operations
+1. **Cherry-picks**: Manages cherry-picks across release branches with AI-assisted conflict resolution (per-target-branch tracking).
+2. **Dependencies**: Manages dependency PRs (those with the `type/dependencies` label) with retry, merge, and approve operations (flat per-PR tracking, lifted into `internal/depmerger`).
 
-Both tools track PR status in YAML configuration files and share common GitHub API infrastructure.
+Both subsystems share the `internal/github` API layer and are tracked in **one** unified YAML file (default `cherry-picker.yaml`) with `cherry_picks:` and `dependencies:` sections, owned by `internal/state`.
+
+A **`daemon`** command runs a background poller that re-scrapes both subsystems on an interval and writes the state file atomically, so interactive commands (`status`, `merge`, ...) read fresh data instantly. The unified state file is written atomically (temp + rename) and writers serialize via an advisory flock on a `<file>.lock` sidecar (`internal/lockfile`); readers are lock-free. A monotonic, PR-keyed merge (`internal/state/merge.go`) prevents a daemon tick from reverting a user action that lands mid-tick.
+
+Commands `fetch`, `status`, `merge`, and `retry` are **unified** and act across both subsystems (`merge`/`retry` dispatch by which section tracks the PR number, applying the correct DCO policy). `pick`/`summary` are cherry-pick only; `approve` is dependencies only. Use `cherry-picker migrate` to build the unified file from legacy `cherry-picks.yaml` + `dep-merger.yaml`.
 
 ## Build and Test Commands
 
 ```bash
-# Build both binaries
+# Build the binary
 make build
 
-# Build individual binaries
-make cherry-picker
-make dep-merger
-
-# Run all checks (format, vet, test)
+# Run all checks (format, vet, test, lint)
 make check
 
 # Run tests only
@@ -43,7 +43,7 @@ make clean
 
 ### Core Components
 
-**main.go**: Entry point using Cobra for CLI commands. All commands have access to a global `--config` flag (default: `cherry-picks.yaml`).
+**main.go**: Entry point using Cobra for CLI commands. All commands have access to a global `--config` flag (default: `cherry-picker.yaml`). The cherry-pick-only commands (`config`, `pick`, `summary`) are wired to the unified state file via adapter closures in `adapters.go` (`loadCherry`/`saveCherry` project the `cherry_picks:` section to/from `cmd.Config`). The unified `fetch`/`status`/`merge`/`retry`/`approve`/`migrate`/`daemon` commands live in the root `main` package (`cmd_*.go`).
 
 **cmd/config.go**: Defines core data structures:
 - `Config`: Repository configuration with org, repo, source branch, AI assistant command, and tracked PRs
@@ -145,87 +145,76 @@ Uses configured AI assistant CLI (cursor-agent, claude, or custom) for interacti
 - `claude`: Anthropic's Claude CLI
 - Custom: Any command-line tool that provides interactive session
 
-## Cherry-Picker Configuration File
+## Unified Configuration File
 
-`cherry-picks.yaml` schema:
+`cherry-picker.yaml` schema (owned by `internal/state`; `internal/config` is retained only as a legacy unmarshal shim for `migrate`):
 ```yaml
 org: string
 repo: string
-source_branch: string
-ai_assistant_command: string  # Required: AI assistant CLI command
 last_fetch_date: time.Time
-tracked_prs:
-  - number: int
-    title: string
-    branches:
-      <branch-name>:
-        status: pending|failed|picked|merged
-        pr:  # Only present for picked/merged status
-          number: int
-          title: string
-          ci_status: passing|failing|pending|unknown
+cherry_picks:
+  source_branch: string
+  ai_assistant_command: string  # Required for the pick command
+  last_checked_release: {<branch>: <tag>}
+  tracker_issues: {<branch>: <issue-number>}
+  tracked_prs:
+    - number: int
+      title: string
+      branches:
+        <branch-name>:
+          status: pending|failed|picked|merged|released
+          pr:  # Only present for picked/merged status
+            number: int
+            title: string
+            ci_status: passing|failing|pending|unknown
+dependencies:
+  tracked_prs:
+    - number: int
+      title: string
+      ci_status: passing|failing|pending|unknown
+      run_attempt: int
+      approved: bool
+      merged: bool
 ```
+
+Run `cherry-picker migrate` (idempotent) to build this file from legacy `cherry-picks.yaml` + `dep-merger.yaml`; the legacy files are left in place.
 
 ---
 
-## Dep-Merger Architecture
+## Dependencies Subsystem (`internal/depmerger`)
 
-**Entry point**: `cmd/dep-merger/main.go` - Standalone binary using Cobra for CLI commands. All commands have access to a global `--config` flag (default: `dep-merger.yaml`).
+Formerly the standalone `dep-merger` binary, now the `internal/depmerger` package. Each operation takes an injected `*github.Client` and mutates a `*depmerger.Config` in memory; persistence is owned by the caller (unified CLI commands / daemon) via `internal/state`.
 
-### Key Differences from Cherry-Picker
+### Key Differences from Cherry-Picks
 
-| Aspect | Cherry-Picker | Dep-Merger |
-|--------|---------------|------------|
+| Aspect | Cherry-Picks | Dependencies |
+|--------|--------------|--------------|
 | Label | `cherry-pick/*` | `type/dependencies` |
 | DCO filtering | Filters out DCO checks | **Respects DCO** (must pass) |
 | PR tracking | Per-branch status | Single PR status |
 | PR discovery | Merged PRs with labels | **Open PRs** with label |
 | AI assistant | Required for conflicts | Not needed |
 
-### Commands (cmd/dep-merger/)
+### Exported operations (`internal/depmerger`)
 
-All commands are in the `main` package within `cmd/dep-merger/`:
+- `RefreshDeps(ctx, client, *Config)` — fetch open `type/dependencies` PRs, update CI/approval, mark closed PRs merged (no file I/O).
+- `MergePRs` / `RetryPRs` / `ApprovePRs(ctx, client, *Config, prNumber)` — bulk (prNumber 0) or single-PR operations.
+- `RenderStatus(w, *Config, execPath, configFlag, showMerged)` — the dependency section of `status`.
+- `FindTrackedPR(*Config, number)` — used by the unified `merge`/`retry` dispatch.
 
-- **config** (`cmd_config.go`): Initialize/update configuration (auto-detects org/repo from git)
-- **fetch** (`cmd_fetch.go`): Fetch open PRs with `type/dependencies` label
-  - Discovers new dependency PRs and adds them to tracking
-  - Updates CI status for existing tracked PRs
-  - Marks PRs as merged if no longer open
-- **status** (`cmd_status.go`): Display tracked PRs with CI status and suggested commands
-  - Shows passing/failing/pending CI status
-  - Suggests `retry` for failing PRs, `merge` for passing PRs
-  - `--fetch` flag to refresh data before displaying
-  - `--show-merged` flag to include merged PRs
-- **retry** (`cmd_retry.go`): Retry failed CI workflows via GitHub Actions API
-  - `dep-merger retry` - Retry all PRs with failing CI
-  - `dep-merger retry 123` - Retry specific PR
-- **merge** (`cmd_merge.go`): Squash merge PRs with passing CI
-  - `dep-merger merge` - Merge all PRs with passing CI
-  - `dep-merger merge 123` - Merge specific PR
-
-### Dep-Merger Configuration File
-
-`dep-merger.yaml` schema:
-```yaml
-org: string
-repo: string
-last_fetch_date: time.Time
-tracked_prs:
-  - number: int
-    title: string
-    ci_status: passing|failing|pending|unknown
-    run_attempt: int  # Number of CI retry attempts
-    merged: bool
-```
+These are invoked by the unified commands in the root `main` package: unified `merge`/`retry` dispatch to the cherry (`cmd/merge`.`Execute` / `cmd/retry`.`Execute`) or dependency path by PR number; `approve` is dependency-only; unified `fetch`/`daemon` call `internal/refresh.All`.
 
 ### Shared Infrastructure
 
-Dep-merger reuses the following from cherry-picker:
+Both subsystems share:
 
 - `internal/github/client.go`: GitHub API client
 - `internal/github/workflows.go`: Retry and merge operations
-- `internal/github/pr.go`: PR fetching (uses `GetOpenPRsWithLabel`, `GetPRWithDetailsNoDCOFilter`)
-- `internal/github/ci_status.go`: CI status checking (with `filterDCO: false`)
+- `internal/github/pr.go`: PR fetching (deps use `GetOpenPRsWithLabel`, `GetPRWithDetailsNoDCOFilter`)
+- `internal/github/ci_status.go`: CI status checking (deps pass `filterDCO: false`)
+- `internal/state`: unified config+state (atomic `Save`, lock-guarded `Update`, monotonic merge)
+- `internal/lockfile`: advisory flock on the `<file>.lock` sidecar for writers
+- `internal/refresh.All`: orchestrates a full scrape of both subsystems (shared by `fetch` and `daemon`)
 
 ---
 
@@ -234,6 +223,7 @@ Dep-merger reuses the following from cherry-picker:
 - `github.com/spf13/cobra`: CLI framework
 - `github.com/google/go-github/v57`: GitHub API client
 - `golang.org/x/oauth2`: GitHub authentication
+- `golang.org/x/sys/unix`: `flock` for the state-file writer lock
 - `gopkg.in/yaml.v3`: YAML parsing
 - Go 1.24.6
 

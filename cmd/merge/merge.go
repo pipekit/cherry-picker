@@ -62,6 +62,15 @@ Examples:
 	return cobraCmd
 }
 
+// Execute runs the cherry-pick merge operation. base must already be
+// initialized (Config and GitHubClient populated). prNumber == 0 merges all
+// eligible PRs/branches; targetBranch may be "". Exposed for the unified merge
+// command's cherry/dep dispatch.
+func Execute(ctx context.Context, base commands.BaseCommand, prNumber int, targetBranch string) error {
+	mc := &command{BaseCommand: base, PRNumber: prNumber, TargetBranch: targetBranch}
+	return mc.Run(ctx)
+}
+
 // Run executes the merge command
 func (mc *command) Run(ctx context.Context) error {
 	// If no PR number, merge all eligible PRs and branches

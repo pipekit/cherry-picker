@@ -1,5 +1,9 @@
-// Package main defines core data structures for dep-merger configuration and PR tracking.
-package main
+// Package depmerger contains the dependency-PR tracking logic (formerly the
+// standalone dep-merger tool): fetching open type/dependencies PRs and
+// retrying / merging / approving them. All operations take an injected
+// *github.Client and mutate a *Config in memory; persistence is owned by the
+// caller (the unified CLI commands and the daemon) via internal/state.
+package depmerger
 
 import (
 	"time"
@@ -21,7 +25,10 @@ const (
 // ParseCIStatus is an alias for types.ParseCIStatus
 var ParseCIStatus = types.ParseCIStatus
 
-// Config represents the structure of dep-merger.yaml
+// Config is the dependency subsystem's in-memory view. It maps to the
+// `dependencies` section of the unified state file (see internal/state); the
+// shared Org/Repo/LastFetchDate are populated from the top-level config when a
+// view is projected.
 type Config struct {
 	Org           string      `yaml:"org"`
 	Repo          string      `yaml:"repo"`
@@ -38,4 +45,14 @@ type TrackedPR struct {
 	FailingChecks []string `yaml:"failing_checks,omitempty"` // Names of failing CI checks (only populated when CI is failing)
 	Approved      bool     `yaml:"approved,omitempty"`
 	Merged        bool     `yaml:"merged"`
+}
+
+// FindTrackedPR finds a tracked PR by number, or nil if not tracked.
+func FindTrackedPR(config *Config, number int) *TrackedPR {
+	for i := range config.TrackedPRs {
+		if config.TrackedPRs[i].Number == number {
+			return &config.TrackedPRs[i]
+		}
+	}
+	return nil
 }

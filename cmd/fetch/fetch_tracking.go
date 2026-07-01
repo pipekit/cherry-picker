@@ -7,18 +7,16 @@ import (
 	"time"
 
 	"github.com/alan/cherry-picker/cmd"
-	"github.com/alan/cherry-picker/internal/commands"
 	"github.com/alan/cherry-picker/internal/github"
 )
 
-// fetchAndProcessPRs handles the main logic of fetching and processing PRs
-func fetchAndProcessPRs(ctx context.Context, configFile string, config *cmd.Config, since time.Time, saveConfig func(string, *cmd.Config) error) error {
-	client, _, err := commands.InitializeGitHubClient(ctx, config)
-	if err != nil {
-		return err
-	}
-
-	allPRs, err := fetchPRsFromGitHub(ctx, config, since)
+// RefreshCherry fetches merged PRs with cherry-pick labels and reconciles the
+// tracked-PR state in config in place, using the supplied client. It performs
+// no file I/O and does not set LastFetchDate; the caller (the fetch command,
+// status --fetch, or the daemon via internal/refresh) owns persistence and the
+// shared timestamp.
+func RefreshCherry(ctx context.Context, client *github.Client, config *cmd.Config, since time.Time) error {
+	allPRs, err := fetchPRsFromGitHub(ctx, client, config, since)
 	if err != nil {
 		return err
 	}
@@ -98,17 +96,12 @@ func fetchAndProcessPRs(ctx context.Context, configFile string, config *cmd.Conf
 		slog.Info("No changes detected")
 	}
 
-	return updateLastFetchDate(configFile, config, saveConfig)
+	return nil
 }
 
 // fetchPRsFromGitHub fetches PRs from GitHub API
-func fetchPRsFromGitHub(ctx context.Context, config *cmd.Config, since time.Time) ([]github.PR, error) {
+func fetchPRsFromGitHub(ctx context.Context, client *github.Client, config *cmd.Config, since time.Time) ([]github.PR, error) {
 	slog.Info("Fetching merged PRs with cherry-pick labels", "org", config.Org, "repo", config.Repo)
-
-	client, _, err := commands.InitializeGitHubClient(ctx, config)
-	if err != nil {
-		return nil, err
-	}
 
 	prs, err := client.GetMergedPRs(ctx, config.SourceBranch, since)
 	if err != nil {

@@ -61,6 +61,15 @@ Examples:
 	return cobraCmd
 }
 
+// Execute runs the cherry-pick retry operation. base must already be
+// initialized (Config and GitHubClient populated). prNumber == 0 retries all
+// eligible PRs/branches; targetBranch may be "". Exposed for the unified retry
+// command's cherry/dep dispatch.
+func Execute(ctx context.Context, base commands.BaseCommand, prNumber int, targetBranch string) error {
+	rc := &command{BaseCommand: base, PRNumber: prNumber, TargetBranch: targetBranch}
+	return rc.Run(ctx)
+}
+
 // Run executes the retry command
 func (rc *command) Run(ctx context.Context) error {
 	// If no PR number, retry all eligible PRs and branches

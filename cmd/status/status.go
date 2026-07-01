@@ -78,6 +78,31 @@ func runStatus(ctx context.Context, configFile string, loadConfig func(string) (
 	return nil
 }
 
+// Render writes the cherry-pick status section for config to stdout. Exposed
+// so the unified status command can show cherry-picks and dependencies
+// together. showReleased includes fully-released PRs.
+func Render(config *cmd.Config, configFile string, showReleased bool) {
+	if len(config.TrackedPRs) == 0 {
+		fmt.Println("No cherry-pick PRs tracked.")
+		return
+	}
+
+	prsToDisplay := config.TrackedPRs
+	if !showReleased {
+		prsToDisplay = filterNonReleasedPRs(config.TrackedPRs)
+	}
+
+	if len(prsToDisplay) == 0 {
+		fmt.Println("No active cherry-pick PRs. All are released (use --show-released to see them).")
+		return
+	}
+
+	sortPRsByNumber(prsToDisplay)
+	displayRepositoryHeader(config)
+	displayAllPRStatuses(prsToDisplay, config, configFile)
+	displayStatusSummary(prsToDisplay)
+}
+
 // filterNonReleasedPRs filters out PRs that are completely released (all branches have status "released")
 func filterNonReleasedPRs(prs []cmd.TrackedPR) []cmd.TrackedPR {
 	var filtered []cmd.TrackedPR
@@ -288,8 +313,11 @@ func displayStatusSummary(prs []cmd.TrackedPR) {
 
 // getConfigFlag returns the config flag if not using default
 func getConfigFlag(configFile string) string {
-	if configFile == "cherry-picks.yaml" {
+	if configFile == defaultConfigFile {
 		return ""
 	}
 	return fmt.Sprintf(" --config %s", configFile)
 }
+
+// defaultConfigFile is the unified tool's default config path.
+const defaultConfigFile = "cherry-picker.yaml"

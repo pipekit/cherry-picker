@@ -7,12 +7,8 @@ GO_FILES := $(shell find . -name '*.go' -type f)
 cherry-picker: check $(GO_FILES)
 	go build -o cherry-picker .
 
-# Build the dep-merger binary
-dep-merger: check $(GO_FILES)
-	go build -o dep-merger ./cmd/dep-merger
-
-# Build both binaries
-build: cherry-picker dep-merger
+# Build the binary
+build: cherry-picker
 
 # Run tests
 test:
@@ -24,7 +20,7 @@ test-coverage:
 
 # Clean build artifacts
 clean:
-	rm -f cherry-picker dep-merger
+	rm -f cherry-picker
 
 # Format code
 fmt:
