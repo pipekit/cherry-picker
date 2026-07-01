@@ -36,10 +36,10 @@ func ParseCIStatus(s string) CIStatus {
 }
 
 // IsCriticalCheck returns true if the check name matches patterns that indicate
-// a critical failure: UI, Lint, Codegen, argo-images.*, Build.*
+// a critical failure: UI, Lint, Codegen, gomod2nix, argo-images.*, Build.*
 func IsCriticalCheck(name string) bool {
 	switch name {
-	case "UI", "Lint", "Codegen":
+	case "UI", "Lint", "Codegen", "gomod2nix":
 		return true
 	}
 	return strings.HasPrefix(name, "argo-images") || strings.HasPrefix(name, "Build")
