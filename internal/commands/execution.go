@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/alan/cherry-picker/cmd"
 	"github.com/alan/cherry-picker/internal/github"
@@ -180,11 +181,12 @@ func (cb *CommandBuilder) BuildCommand(runFunc func(cobraCmd *cobra.Command, arg
 
 	// Add examples if provided
 	if len(cb.ExampleUsage) > 0 {
-		examples := "\nExamples:\n"
+		var examples strings.Builder
+		examples.WriteString("\nExamples:\n")
 		for _, example := range cb.ExampleUsage {
-			examples += "  " + example + "\n"
+			fmt.Fprintf(&examples, "  %s\n", example)
 		}
-		cobraCmd.Long += examples
+		cobraCmd.Long += examples.String()
 	}
 
 	return cobraCmd

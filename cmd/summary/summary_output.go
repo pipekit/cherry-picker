@@ -77,7 +77,7 @@ func generateMarkdownSummary(version, lastTag, _ string, commits []github.Commit
 	})
 
 	var output strings.Builder
-	output.WriteString(fmt.Sprintf("### %s:\n\n", version))
+	fmt.Fprintf(&output, "### %s:\n\n", version)
 	for _, e := range entries {
 		output.WriteString(e.line)
 	}

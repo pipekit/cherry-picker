@@ -17,7 +17,7 @@ import (
 func fetchGitData(ctx context.Context, branch string) error {
 	slog.Debug("Fetching latest data from git remote", "branch", branch)
 	// Fetch tags and the specific branch
-	cmd := exec.CommandContext(ctx, "git", "fetch", "--tags", "origin", branch)
+	cmd := exec.CommandContext(ctx, "git", "fetch", "--tags", "origin", branch) //nolint:gosec // Branch name is from tracked config
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to fetch from remote: %w (output: %s)", err, string(output))
 	}

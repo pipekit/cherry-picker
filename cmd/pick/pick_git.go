@@ -21,7 +21,7 @@ func (*command) performGitFetch() error {
 func (*command) checkoutBranch(branch string) error {
 	slog.Info("Checking out branch", "branch", branch)
 
-	checkoutCmd := exec.Command("git", "checkout", branch)
+	checkoutCmd := exec.Command("git", "checkout", branch) //nolint:gosec // Branch name is from tracked config
 	checkoutCmd.Stdout = os.Stdout
 	checkoutCmd.Stderr = os.Stderr
 	if err := checkoutCmd.Run(); err != nil {
@@ -44,15 +44,15 @@ func (*command) createAndCheckoutBranch(branchName string) error {
 	slog.Info("Creating and checking out branch", "branch", branchName)
 
 	// Delete local branch if it exists (ignore error if branch doesn't exist)
-	deleteLocalCmd := exec.Command("git", "branch", "-D", branchName)
+	deleteLocalCmd := exec.Command("git", "branch", "-D", branchName) //nolint:gosec // Branch name is from tracked config
 	_ = deleteLocalCmd.Run()
 
 	// Delete remote branch if it exists (ignore error if branch doesn't exist)
-	deleteRemoteCmd := exec.Command("git", "push", "origin", "--delete", branchName)
+	deleteRemoteCmd := exec.Command("git", "push", "origin", "--delete", branchName) //nolint:gosec // Branch name is from tracked config
 	_ = deleteRemoteCmd.Run()
 
 	// Create and checkout the new branch
-	cmd := exec.Command("git", "checkout", "-b", branchName)
+	cmd := exec.Command("git", "checkout", "-b", branchName) //nolint:gosec // Branch name is from tracked config
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -61,7 +61,7 @@ func (*command) createAndCheckoutBranch(branchName string) error {
 // performCherryPick executes the git cherry-pick command with AI integration for conflicts
 func (pc *command) performCherryPick(sha string) error {
 	slog.Info("Cherry-picking commit", "sha", sha)
-	cmd := exec.Command("git", "cherry-pick", "-x", "--signoff", sha)
+	cmd := exec.Command("git", "cherry-pick", "-x", "--signoff", sha) //nolint:gosec // Commit SHA is from tracked config
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -119,7 +119,7 @@ func (pc *command) performCherryPick(sha string) error {
 // pushBranch pushes a branch to origin
 func (*command) pushBranch(branchName string) error {
 	slog.Info("Pushing branch", "branch", branchName)
-	cmd := exec.Command("git", "push", "origin", branchName)
+	cmd := exec.Command("git", "push", "origin", branchName) //nolint:gosec // Branch name is from tracked config
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -206,7 +206,7 @@ func (*command) moveSignedOffByLinesToEnd() error {
 
 // getCommitInfo gets a human-readable description of a commit
 func (*command) getCommitInfo(sha string) (string, error) {
-	cmd := exec.Command("git", "log", "--oneline", "-1", sha)
+	cmd := exec.Command("git", "log", "--oneline", "-1", sha) //nolint:gosec // Commit SHA is from tracked config
 	output, err := cmd.Output()
 	if err != nil {
 		return "", err

@@ -10,10 +10,10 @@ func formatSuccessMessage(action string, prNumber int, targetBranch string, bran
 	var msg strings.Builder
 
 	if targetBranch != "" {
-		msg.WriteString(fmt.Sprintf("✅ Successfully %s PR #%d for branch %s\n", action, prNumber, targetBranch))
+		fmt.Fprintf(&msg, "✅ Successfully %s PR #%d for branch %s\n", action, prNumber, targetBranch)
 	} else {
-		msg.WriteString(fmt.Sprintf("✅ Successfully %s PR #%d for %d branch(es): %s\n",
-			action, prNumber, len(branches), strings.Join(branches, ", ")))
+		fmt.Fprintf(&msg, "✅ Successfully %s PR #%d for %d branch(es): %s\n",
+			action, prNumber, len(branches), strings.Join(branches, ", "))
 	}
 
 	return msg.String()
