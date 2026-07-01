@@ -11,8 +11,18 @@ func TestIsCherryPickerFile(t *testing.T) {
 		want     bool
 	}{
 		{
+			name:     "unified cherry-picker.yaml file",
+			filePath: "cherry-picker.yaml",
+			want:     true,
+		},
+		{
 			name:     "cherry-picks.yaml file",
 			filePath: "cherry-picks.yaml",
+			want:     true,
+		},
+		{
+			name:     "file under .claude/",
+			filePath: ".claude/settings.json",
 			want:     true,
 		},
 		{

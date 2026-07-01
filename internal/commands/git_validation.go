@@ -3,8 +3,6 @@ package commands
 import (
 	"fmt"
 	"os/exec"
-	//	"path/filepath"
-	"slices"
 	"strings"
 )
 
@@ -51,16 +49,29 @@ func IsWorkingDirectoryClean() bool {
 	return true
 }
 
+// keepFiles are working-tree paths that should not make the tree count as
+// "dirty" for the pick command's pre-flight check: the tool's own config/state
+// files and local Claude assets. Entries ending in "/" match any path under
+// that directory; other entries match exactly.
 var keepFiles = []string{
-	"cherry-picks.yaml",
-	"dep-merger.yaml",
+	"cherry-picker.yaml", // unified config+state file (default)
+	"cherry-picks.yaml",  // legacy cherry-picker state (pre-migration)
+	"dep-merger.yaml",    // legacy dep-merger state (pre-migration)
 	"CLAUDE.md",
 	".claude/",
 }
 
-// IsLocalFile checks if a file is a cherry-picker configuration file
+// isLocalFile reports whether a working-tree path is one of the tool's own
+// files and can be ignored when checking that the tree is clean.
 func isLocalFile(filePath string) bool {
-	//	fileName := filepath.Base(filePath)
-	fmt.Printf("Testing %s\n", filePath)
-	return slices.Contains(keepFiles, filePath)
+	for _, keep := range keepFiles {
+		if strings.HasSuffix(keep, "/") {
+			if strings.HasPrefix(filePath, keep) {
+				return true
+			}
+		} else if filePath == keep {
+			return true
+		}
+	}
+	return false
 }
