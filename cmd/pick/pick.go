@@ -89,7 +89,7 @@ func (pc *command) runPick(ctx context.Context) error {
 	}
 
 	// Git operations
-	if err := commands.ValidateGitRepository(); err != nil {
+	if err := commands.ValidateGitRepository(*pc.ConfigFile); err != nil {
 		return err
 	}
 
