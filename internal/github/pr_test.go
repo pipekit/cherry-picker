@@ -3,7 +3,7 @@ package github
 import (
 	"testing"
 
-	"github.com/google/go-github/v57/github"
+	"github.com/google/go-github/v80/github"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -16,32 +16,32 @@ func TestExtractCherryPickBranchesFromLabels(t *testing.T) {
 		{
 			name: "single cherry-pick label",
 			labels: []*github.Label{
-				{Name: stringPtr("cherry-pick/3.6")},
+				{Name: new("cherry-pick/3.6")},
 			},
 			expected: []string{"release-3.6"},
 		},
 		{
 			name: "multiple cherry-pick labels",
 			labels: []*github.Label{
-				{Name: stringPtr("cherry-pick/3.6")},
-				{Name: stringPtr("cherry-pick/3.7")},
-				{Name: stringPtr("cherry-pick/4.0")},
+				{Name: new("cherry-pick/3.6")},
+				{Name: new("cherry-pick/3.7")},
+				{Name: new("cherry-pick/4.0")},
 			},
 			expected: []string{"release-3.6", "release-3.7", "release-4.0"},
 		},
 		{
 			name: "mixed labels - only cherry-pick extracted",
 			labels: []*github.Label{
-				{Name: stringPtr("bug")},
-				{Name: stringPtr("cherry-pick/3.6")},
-				{Name: stringPtr("enhancement")},
-				{Name: stringPtr("cherry-pick/3.7")},
+				{Name: new("bug")},
+				{Name: new("cherry-pick/3.6")},
+				{Name: new("enhancement")},
+				{Name: new("cherry-pick/3.7")},
 			},
 			expected: []string{"release-3.6", "release-3.7"},
 		},
 		{
 			name:     "no cherry-pick labels",
-			labels:   []*github.Label{{Name: stringPtr("bug")}, {Name: stringPtr("enhancement")}},
+			labels:   []*github.Label{{Name: new("bug")}, {Name: new("enhancement")}},
 			expected: nil,
 		},
 		{
@@ -73,22 +73,22 @@ func TestFilterCherryPickLabels(t *testing.T) {
 		{
 			name: "filters cherry-pick labels",
 			labels: []*github.Label{
-				{Name: stringPtr("cherry-pick/3.6")},
-				{Name: stringPtr("bug")},
-				{Name: stringPtr("cherry-pick/3.7")},
+				{Name: new("cherry-pick/3.6")},
+				{Name: new("bug")},
+				{Name: new("cherry-pick/3.7")},
 			},
 			expected: []string{"cherry-pick/3.6", "cherry-pick/3.7"},
 		},
 		{
 			name:     "no cherry-pick labels returns empty",
-			labels:   []*github.Label{{Name: stringPtr("bug")}},
+			labels:   []*github.Label{{Name: new("bug")}},
 			expected: nil, // Go idiom: nil slice is equivalent to empty slice
 		},
 		{
 			name: "cherry-pick prefix matching",
 			labels: []*github.Label{
-				{Name: stringPtr("cherry-pick-beta")}, // Should match (starts with cherry-pick)
-				{Name: stringPtr("not-cherry-pick")},  // Should not match
+				{Name: new("cherry-pick-beta")}, // Should match (starts with cherry-pick)
+				{Name: new("not-cherry-pick")},  // Should not match
 			},
 			expected: []string{"cherry-pick-beta"},
 		},
@@ -155,7 +155,7 @@ func TestExtractOrgFromIssue(t *testing.T) {
 			name: "valid issue with repository owner",
 			issue: &github.Issue{
 				Repository: &github.Repository{
-					Owner: &github.User{Login: stringPtr("test-org")},
+					Owner: &github.User{Login: new("test-org")},
 				},
 			},
 			expected: "test-org",
@@ -191,7 +191,7 @@ func TestExtractRepoFromIssue(t *testing.T) {
 		{
 			name: "valid issue with repository",
 			issue: &github.Issue{
-				Repository: &github.Repository{Name: stringPtr("test-repo")},
+				Repository: &github.Repository{Name: new("test-repo")},
 			},
 			expected: "test-repo",
 		},
@@ -208,9 +208,4 @@ func TestExtractRepoFromIssue(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
-}
-
-// Helper function to create string pointers
-func stringPtr(s string) *string {
-	return &s
 }

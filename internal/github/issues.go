@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/google/go-github/v57/github"
+	"github.com/google/go-github/v80/github"
 )
 
 // SearchIssuesByText searches for open issues containing the specified text

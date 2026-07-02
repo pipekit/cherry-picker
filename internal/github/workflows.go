@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/google/go-github/v57/github"
+	"github.com/google/go-github/v80/github"
 )
 
 // RetryFailedWorkflows retries all failed workflow runs for a PR
@@ -138,7 +138,7 @@ func (c *Client) ApprovePR(ctx context.Context, prNumber int) error {
 	slog.Debug("GitHub API: Approving PR", "org", c.org, "repo", c.repo, "pr", prNumber)
 
 	review := &github.PullRequestReviewRequest{
-		Event: github.String("APPROVE"),
+		Event: new("APPROVE"),
 	}
 
 	_, _, err := c.client.PullRequests.CreateReview(ctx, c.org, c.repo, prNumber, review)

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/go-github/v57/github"
+	"github.com/google/go-github/v80/github"
 )
 
 // GetMergedPRs fetches all merged PRs to the specified branch with cherry-pick labels

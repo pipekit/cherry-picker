@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/google/go-github/v57/github"
+	"github.com/google/go-github/v80/github"
 )
 
 // ListTags gets all tags from the repository

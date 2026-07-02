@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/google/go-github/v57/github"
+	"github.com/google/go-github/v80/github"
 )
 
 // GetIssueComments retrieves all comments for a specific issue
@@ -46,7 +46,7 @@ func (c *Client) GetIssueComments(ctx context.Context, issueNumber int) ([]Comme
 // CreateIssueComment creates a new comment on an issue
 func (c *Client) CreateIssueComment(ctx context.Context, issueNumber int, body string) (*Comment, error) {
 	commentInput := &github.IssueComment{
-		Body: github.String(body),
+		Body: new(body),
 	}
 
 	slog.Debug("GitHub API: Creating issue comment", "org", c.org, "repo", c.repo, "issue", issueNumber)
@@ -67,7 +67,7 @@ func (c *Client) CreateIssueComment(ctx context.Context, issueNumber int, body s
 // UpdateIssueComment updates an existing comment
 func (c *Client) UpdateIssueComment(ctx context.Context, commentID int64, body string) (*Comment, error) {
 	commentInput := &github.IssueComment{
-		Body: github.String(body),
+		Body: new(body),
 	}
 
 	slog.Debug("GitHub API: Updating issue comment", "org", c.org, "repo", c.repo, "comment_id", commentID)

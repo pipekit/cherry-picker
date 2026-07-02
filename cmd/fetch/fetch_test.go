@@ -192,7 +192,7 @@ func TestDetermineSinceDate(t *testing.T) {
 		{
 			name:          "use lastFetchDate",
 			sinceDate:     "",
-			lastFetchDate: ptrTime(time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)),
+			lastFetchDate: new(time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)),
 			wantErr:       false,
 			checkResult: func(t *testing.T, result time.Time) {
 				t.Helper()
@@ -216,7 +216,7 @@ func TestDetermineSinceDate(t *testing.T) {
 		{
 			name:          "explicit date overrides lastFetchDate",
 			sinceDate:     "2024-03-01",
-			lastFetchDate: ptrTime(time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)),
+			lastFetchDate: new(time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)),
 			wantErr:       false,
 			checkResult: func(t *testing.T, result time.Time) {
 				t.Helper()
@@ -255,9 +255,4 @@ func TestCommandOutput(t *testing.T) {
 	err := cobraCmd.Help()
 	require.NoError(t, err)
 	assert.NotEmpty(t, buf.String(), "should generate help text")
-}
-
-// ptrTime is a helper to create time.Time pointers
-func ptrTime(t time.Time) *time.Time {
-	return &t
 }

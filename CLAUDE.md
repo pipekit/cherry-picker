@@ -57,7 +57,7 @@ make clean
 
 **internal/config/config.go**: YAML marshaling/unmarshaling for configuration persistence.
 
-**internal/github/client.go**: GitHub API wrapper using `google/go-github/v57`:
+**internal/github/client.go**: GitHub API wrapper using `google/go-github/v80`:
 - Fetches merged PRs since a date
 - Retrieves PR details with CI status (checks both combined status and check runs)
 - DCO check filtering (ignores DCO status when determining CI health)
@@ -221,11 +221,11 @@ Both subsystems share:
 ## Dependencies
 
 - `github.com/spf13/cobra`: CLI framework
-- `github.com/google/go-github/v57`: GitHub API client
+- `github.com/google/go-github/v80`: GitHub API client
 - `golang.org/x/oauth2`: GitHub authentication
 - `golang.org/x/sys/unix`: `flock` for the state-file writer lock
 - `gopkg.in/yaml.v3`: YAML parsing
-- Go 1.24.6
+- Go 1.26.4
 
 ## Testing
 

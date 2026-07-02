@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"slices"
 
-	"github.com/google/go-github/v57/github"
+	"github.com/google/go-github/v80/github"
 )
 
 // GetCherryPickPRsFromComments extracts cherry-pick PR numbers and failures from bot comments
