@@ -94,6 +94,104 @@ func TestMergeFetchedAdvancesCherryBranch(t *testing.T) {
 	assert.Equal(t, cmd.BranchStatusMerged, cur.CherryPicks.TrackedPRs[0].Branches["release-3.6"].Status)
 }
 
+func TestMergeFetchedRemovesBranchWhenLabelRemoved(t *testing.T) {
+	// The cherry-pick/3.6 label was removed upstream, so the fetch snapshot no
+	// longer carries the pending branch; it must not be resurrected from disk.
+	cur := &Config{CherryPicks: CherryPickSection{TrackedPRs: []cmd.TrackedPR{{
+		Number: 1,
+		Branches: map[string]cmd.BranchStatus{
+			"release-3.6": {Status: cmd.BranchStatusPending},
+			"release-3.5": {Status: cmd.BranchStatusMerged},
+		},
+	}}}}
+	fetched := &Config{CherryPicks: CherryPickSection{TrackedPRs: []cmd.TrackedPR{{
+		Number:   1,
+		Branches: map[string]cmd.BranchStatus{"release-3.5": {Status: cmd.BranchStatusMerged}},
+	}}}}
+
+	cur.MergeFetched(fetched)
+	require.Len(t, cur.CherryPicks.TrackedPRs, 1)
+	branches := cur.CherryPicks.TrackedPRs[0].Branches
+	assert.NotContains(t, branches, "release-3.6", "pending branch with removed label must be deleted")
+	assert.Contains(t, branches, "release-3.5", "merged branch must be kept")
+}
+
+func TestMergeFetchedRemovesFailedBranchWhenLabelRemoved(t *testing.T) {
+	cur := &Config{CherryPicks: CherryPickSection{TrackedPRs: []cmd.TrackedPR{{
+		Number: 1,
+		Branches: map[string]cmd.BranchStatus{
+			"release-3.6": {Status: cmd.BranchStatusFailed},
+			"release-3.5": {Status: cmd.BranchStatusPicked},
+		},
+	}}}}
+	fetched := &Config{CherryPicks: CherryPickSection{TrackedPRs: []cmd.TrackedPR{{
+		Number:   1,
+		Branches: map[string]cmd.BranchStatus{"release-3.5": {Status: cmd.BranchStatusPicked}},
+	}}}}
+
+	cur.MergeFetched(fetched)
+	branches := cur.CherryPicks.TrackedPRs[0].Branches
+	assert.NotContains(t, branches, "release-3.6", "failed branch with removed label must be deleted")
+	assert.Contains(t, branches, "release-3.5")
+}
+
+func TestMergeFetchedDropsPRAbsentFromSnapshot(t *testing.T) {
+	// All labels were removed from PR 1, so the fetch removed it entirely; PR 2
+	// is still tracked and must survive.
+	cur := &Config{CherryPicks: CherryPickSection{TrackedPRs: []cmd.TrackedPR{
+		{Number: 1, Branches: map[string]cmd.BranchStatus{"release-3.6": {Status: cmd.BranchStatusPending}}},
+		{Number: 2, Branches: map[string]cmd.BranchStatus{"release-3.6": {Status: cmd.BranchStatusPending}}},
+	}}}
+	fetched := &Config{CherryPicks: CherryPickSection{TrackedPRs: []cmd.TrackedPR{
+		{Number: 2, Branches: map[string]cmd.BranchStatus{"release-3.6": {Status: cmd.BranchStatusPending}}},
+	}}}
+
+	cur.MergeFetched(fetched)
+	require.Len(t, cur.CherryPicks.TrackedPRs, 1)
+	assert.Equal(t, 2, cur.CherryPicks.TrackedPRs[0].Number)
+}
+
+func TestMergeFetchedKeepsAdvancedBranchesOfAbsentPR(t *testing.T) {
+	// A PR absent from the snapshot keeps its picked/merged history; only its
+	// pending/failed branches are deleted.
+	cur := &Config{CherryPicks: CherryPickSection{TrackedPRs: []cmd.TrackedPR{{
+		Number: 1,
+		Branches: map[string]cmd.BranchStatus{
+			"release-3.6": {Status: cmd.BranchStatusPending},
+			"release-3.5": {Status: cmd.BranchStatusMerged},
+		},
+	}}}}
+	fetched := &Config{CherryPicks: CherryPickSection{}}
+
+	cur.MergeFetched(fetched)
+	require.Len(t, cur.CherryPicks.TrackedPRs, 1)
+	branches := cur.CherryPicks.TrackedPRs[0].Branches
+	assert.NotContains(t, branches, "release-3.6")
+	assert.Contains(t, branches, "release-3.5")
+}
+
+func TestMergeCherryViewStaysAdditive(t *testing.T) {
+	// A command view saved after a long session must not delete a PR or branch
+	// a concurrent daemon tick wrote in the meantime.
+	cur := &Config{CherryPicks: CherryPickSection{TrackedPRs: []cmd.TrackedPR{
+		{Number: 1, Branches: map[string]cmd.BranchStatus{
+			"release-3.6": {Status: cmd.BranchStatusPending},
+			"release-3.5": {Status: cmd.BranchStatusPending},
+		}},
+		{Number: 2, Branches: map[string]cmd.BranchStatus{"release-3.6": {Status: cmd.BranchStatusPending}}},
+	}}}
+	view := cur.CherryView()
+	view.TrackedPRs = []cmd.TrackedPR{
+		{Number: 1, Branches: map[string]cmd.BranchStatus{"release-3.6": {Status: cmd.BranchStatusPicked}}},
+	}
+
+	cur.MergeCherryView(view)
+	require.Len(t, cur.CherryPicks.TrackedPRs, 2, "PR 2 written concurrently must survive a view save")
+	branches := cur.CherryPicks.TrackedPRs[0].Branches
+	assert.Contains(t, branches, "release-3.5", "branch absent from the view must survive")
+	assert.Equal(t, cmd.BranchStatusPicked, branches["release-3.6"].Status)
+}
+
 func TestMergeDepMonotonicFlagsAndFreshCI(t *testing.T) {
 	// User approved+merged PR 1; stale fetch shows neither, but fresher CI.
 	cur := &Config{Dependencies: DependencySection{TrackedPRs: []depmerger.TrackedPR{

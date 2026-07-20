@@ -16,8 +16,14 @@ import (
 // incoming data wins when its status rank is at least the current one, so the
 // daemon keeps refreshing CI while never downgrading an advanced PR.
 //
-// When no daemon runs concurrently, the reloaded state equals what the command
-// read, so these merges reduce to a plain overwrite (no behavior change).
+// Deletions are handled asymmetrically. A fetch snapshot (MergeFetched) is a
+// full GitHub scrape, so a pending/failed branch absent from it means the
+// cherry-pick label was removed upstream — those are deleted, and PRs left
+// with no branches are dropped. Branches at picked or beyond are never
+// deleted, so a stale snapshot cannot erase a user action that landed
+// mid-tick. Command views (MergeCherryView) never remove entries, so their
+// merge stays purely additive and a concurrent daemon write survives a
+// long-running command's save.
 
 func branchRank(s cmd.BranchStatusType) int {
 	switch s {
@@ -36,10 +42,12 @@ func branchRank(s cmd.BranchStatusType) int {
 	}
 }
 
-// MergeFetched overlays a full fetch snapshot onto the receiver.
+// MergeFetched overlays a full fetch snapshot onto the receiver. The snapshot
+// is authoritative for branch membership: pending/failed branches (and PRs)
+// absent from it were removed upstream and are deleted.
 func (c *Config) MergeFetched(fetched *Config) {
 	c.applyShared(fetched.Org, fetched.Repo, fetched.LastFetchDate)
-	mergeCherrySection(&c.CherryPicks, fetched.CherryPicks)
+	mergeCherrySection(&c.CherryPicks, fetched.CherryPicks, true)
 	mergeDepSection(&c.Dependencies, fetched.Dependencies)
 }
 
@@ -52,7 +60,7 @@ func (c *Config) MergeCherryView(v *cmd.Config) {
 		LastCheckedRelease: v.LastCheckedRelease,
 		TrackerIssues:      v.TrackerIssues,
 		TrackedPRs:         v.TrackedPRs,
-	})
+	}, false)
 }
 
 // MergeDepView overlays a mutated dependency view onto the receiver.
@@ -73,7 +81,7 @@ func (c *Config) applyShared(org, repo string, date *time.Time) {
 	}
 }
 
-func mergeCherrySection(cur *CherryPickSection, in CherryPickSection) {
+func mergeCherrySection(cur *CherryPickSection, in CherryPickSection, authoritative bool) {
 	if in.SourceBranch != "" {
 		cur.SourceBranch = in.SourceBranch
 	}
@@ -82,13 +90,18 @@ func mergeCherrySection(cur *CherryPickSection, in CherryPickSection) {
 	}
 	cur.LastCheckedRelease = mergeStringMap(cur.LastCheckedRelease, in.LastCheckedRelease)
 	cur.TrackerIssues = mergeIntMap(cur.TrackerIssues, in.TrackerIssues)
-	cur.TrackedPRs = mergeCherryTracked(cur.TrackedPRs, in.TrackedPRs)
+	cur.TrackedPRs = mergeCherryTracked(cur.TrackedPRs, in.TrackedPRs, authoritative)
 }
 
-func mergeCherryTracked(cur, in []cmd.TrackedPR) []cmd.TrackedPR {
+func mergeCherryTracked(cur, in []cmd.TrackedPR, authoritative bool) []cmd.TrackedPR {
 	index := make(map[int]int, len(cur))
 	for i := range cur {
 		index[cur[i].Number] = i
+	}
+
+	inByNumber := make(map[int]*cmd.TrackedPR, len(in))
+	for i := range in {
+		inByNumber[in[i].Number] = &in[i]
 	}
 
 	for _, inPR := range in {
@@ -114,7 +127,37 @@ func mergeCherryTracked(cur, in []cmd.TrackedPR) []cmd.TrackedPR {
 			}
 		}
 	}
-	return cur
+
+	if !authoritative {
+		return cur
+	}
+
+	// The incoming snapshot is a full scrape: a pending/failed branch it does
+	// not carry had its cherry-pick label removed upstream. Delete those, and
+	// drop PRs the snapshot no longer tracks once no branches remain. Branches
+	// at picked or beyond are kept regardless, so a stale snapshot can never
+	// erase an advanced state.
+	kept := cur[:0]
+	for i := range cur {
+		curPR := &cur[i]
+		inPR, tracked := inByNumber[curPR.Number]
+		for name, branch := range curPR.Branches {
+			if branchRank(branch.Status) > branchRank(cmd.BranchStatusFailed) {
+				continue
+			}
+			if tracked {
+				if _, inHasBranch := inPR.Branches[name]; inHasBranch {
+					continue
+				}
+			}
+			delete(curPR.Branches, name)
+		}
+		if !tracked && len(curPR.Branches) == 0 {
+			continue
+		}
+		kept = append(kept, *curPR)
+	}
+	return kept
 }
 
 func mergeDepSection(cur *DependencySection, in DependencySection) {
